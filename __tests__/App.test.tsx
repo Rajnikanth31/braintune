@@ -34,6 +34,15 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+// Mock Mascot to prevent looping animations in tests
+jest.mock('../src/components/Mascot', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return {
+    Mascot: () => React.createElement(Text, null, 'Mascot Mock'),
+  };
+});
+
 test('renders correctly', async () => {
   await ReactTestRenderer.act(() => {
     ReactTestRenderer.create(<App />);
