@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StatusBar,
   StyleSheet,
@@ -16,6 +16,7 @@ import { AppProvider, useApp } from './src/state/AppContext';
 import { Mascot } from './src/components/Mascot';
 import { FadeInView } from './src/components/FadeInView';
 import { ParentGate } from './src/components/ParentGate';
+import { SoundService } from './src/audio/SoundService';
 import { MemoryGame } from './src/games/memory/MemoryGame';
 import { LettersGame } from './src/games/letters/LettersGame';
 import { NumbersGame } from './src/games/numbers/NumbersGame';
@@ -96,11 +97,35 @@ function AppContent() {
   };
 
   const launchGame = (gameId: string) => {
+    SoundService.playClick();
     if (gameId === 'memory') setCurrentScreen('memory_game');
     if (gameId === 'letters') setCurrentScreen('letters_game');
     if (gameId === 'numbers') setCurrentScreen('numbers_game');
     if (gameId === 'colors') setCurrentScreen('colors_game');
   };
+
+  // Preload audio clips once.
+  useEffect(() => {
+    SoundService.load();
+  }, []);
+
+  // Keep audio engine in sync with the parent-controlled settings.
+  useEffect(() => {
+    SoundService.setSfxEnabled(settings.soundEffectsEnabled);
+  }, [settings.soundEffectsEnabled]);
+
+  useEffect(() => {
+    SoundService.setMusicEnabled(settings.musicEnabled);
+  }, [settings.musicEnabled]);
+
+  // Play looping background music while a game is on screen; pause elsewhere.
+  useEffect(() => {
+    if (currentScreen.endsWith('_game')) {
+      SoundService.startMusic();
+    } else {
+      SoundService.stopMusic();
+    }
+  }, [currentScreen]);
 
   // SCREEN RENDERING
   const backToHub = () => setCurrentScreen('hub');

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useApp } from '../../state/AppContext';
 import { MAX_LEVEL, ROUNDS_PER_SESSION, nextDifficulty } from './progression';
 import { haptic } from '../../audio/haptics';
+import { SoundService } from '../../audio/SoundService';
 
 export interface UseGameSessionOptions {
   gameId: string;
@@ -96,7 +97,8 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
         setCorrectPulse(p => p + 1);
       }
 
-      // Tactile feedback (gentle; respects the sound/feedback preference).
+      // Audio + tactile feedback (both respect their settings internally).
+      SoundService.playSfx(isCorrect ? 'correct' : 'wrong');
       haptic(isCorrect ? 'success' : 'error', settings.soundEffectsEnabled);
       return isCorrect;
     },
@@ -107,6 +109,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     if (savedRef.current) return;
     savedRef.current = true;
     setIsComplete(true);
+    SoundService.playSfx('win');
     const result = await updateGameResult(
       gameId,
       starsRef.current,

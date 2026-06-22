@@ -9,8 +9,15 @@ import {
 import { COLORS, SHADOWS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { Celebration } from '../../components/Celebration';
+import { SoundService } from '../../audio/SoundService';
 import { GameSession } from './useGameSession';
 import { badgeById, levelLabel } from './progression';
+
+/** Run a click sound then the action — for tactile/audio button feedback. */
+const withClick = (fn: () => void) => () => {
+  SoundService.playClick();
+  fn();
+};
 
 /* --------------------------- Game header --------------------------- */
 
@@ -30,7 +37,7 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
   <View style={[styles.header, { backgroundColor: themeColor }]}>
     <TouchableOpacity
       style={styles.backButton}
-      onPress={onBack}
+      onPress={withClick(onBack)}
       accessibilityRole="button"
       accessibilityLabel="Go back"
     >
@@ -91,7 +98,7 @@ export const LevelPicker: React.FC<LevelPickerProps> = ({
         <TouchableOpacity
           key={lvl}
           disabled={!isUnlocked}
-          onPress={() => onSelect(lvl)}
+          onPress={withClick(() => onSelect(lvl))}
           accessibilityRole="button"
           accessibilityState={{ disabled: !isUnlocked, selected: isActive }}
           accessibilityLabel={`Level ${lvl}, ${levelLabel(lvl)}${
@@ -168,14 +175,14 @@ export const GameSuccess: React.FC<GameSuccessProps> = ({
       <View style={styles.successButtons}>
         <TouchableOpacity
           style={[styles.restartBtn, { backgroundColor: themeColor }]}
-          onPress={onRestart}
+          onPress={withClick(onRestart)}
           accessibilityRole="button"
         >
           <Text style={styles.restartBtnText}>Play Again! 🔁</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.exitBtn}
-          onPress={onBack}
+          onPress={withClick(onBack)}
           accessibilityRole="button"
         >
           <Text style={styles.exitBtnText}>Back to Hub 🏠</Text>
@@ -213,7 +220,7 @@ export const TutorialCard: React.FC<TutorialProps> = ({
       <Text style={styles.tutorialBody}>{body}</Text>
       <TouchableOpacity
         style={[styles.startBtn, { backgroundColor: themeColor }]}
-        onPress={onStart}
+        onPress={withClick(onStart)}
         accessibilityRole="button"
         accessibilityLabel="Start playing"
       >

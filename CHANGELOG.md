@@ -5,6 +5,12 @@ All notable changes to Braintune are documented here. This project follows
 
 ## [Unreleased]
 
+### Audio (round 4)
+- **Background music + sound effects:** looping music while playing, plus click / correct / wrong / win cues, via a new crash-safe `SoundService` (wraps `react-native-sound`; no-ops safely until the native module is rebuilt).
+- **Controlled by the existing settings:** the Parent Zone **Background Music** and **Sound Effects** toggles drive audio live.
+- **Generated assets:** five royalty-free, kid-friendly clips synthesized and bundled in `android/app/src/main/res/raw/`.
+- Added `react-native-sound` dependency; see `docs/AUDIO_SETUP.md` for the install / rebuild / iOS-bundle steps.
+
 ### Game feel / "juice" (round 3)
 - **Celebration particles:** rising stars + confetti burst on every correct answer, and a bigger burst on the session-complete screen (`Celebration` component, shared across all games).
 - **Haptic feedback:** gentle vibration on correct/incorrect answers via the built-in Vibration API (no new dependency), gated by the Sound Effects setting.
