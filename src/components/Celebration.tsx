@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Dimensions, Easing, View } from 'react-native';
 import { useApp } from '../state/AppContext';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 const CONFETTI_COLORS = [
   '#FC6E51',
@@ -99,7 +99,7 @@ const Piece: React.FC<{ spec: PieceSpec }> = ({ spec }) => {
       style={{
         position: 'absolute',
         left: spec.startX,
-        top: '55%',
+        top: height * 0.55,
         opacity,
         transform: [{ translateY }, { translateX }, { scale }, { rotate }],
       }}
