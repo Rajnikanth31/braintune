@@ -14,6 +14,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SHADOWS } from './src/theme/colors';
 import { AppProvider, useApp } from './src/state/AppContext';
 import { Mascot } from './src/components/Mascot';
+import { FadeInView } from './src/components/FadeInView';
 import { ParentGate } from './src/components/ParentGate';
 import { MemoryGame } from './src/games/memory/MemoryGame';
 import { LettersGame } from './src/games/letters/LettersGame';
@@ -102,24 +103,42 @@ function AppContent() {
   };
 
   // SCREEN RENDERING
+  const backToHub = () => setCurrentScreen('hub');
   if (currentScreen === 'memory_game') {
-    return <MemoryGame onBack={() => setCurrentScreen('hub')} />;
+    return (
+      <FadeInView style={styles.container} key="memory_game">
+        <MemoryGame onBack={backToHub} />
+      </FadeInView>
+    );
   }
 
   if (currentScreen === 'letters_game') {
-    return <LettersGame onBack={() => setCurrentScreen('hub')} />;
+    return (
+      <FadeInView style={styles.container} key="letters_game">
+        <LettersGame onBack={backToHub} />
+      </FadeInView>
+    );
   }
 
   if (currentScreen === 'numbers_game') {
-    return <NumbersGame onBack={() => setCurrentScreen('hub')} />;
+    return (
+      <FadeInView style={styles.container} key="numbers_game">
+        <NumbersGame onBack={backToHub} />
+      </FadeInView>
+    );
   }
 
   if (currentScreen === 'colors_game') {
-    return <ColorsGame onBack={() => setCurrentScreen('hub')} />;
+    return (
+      <FadeInView style={styles.container} key="colors_game">
+        <ColorsGame onBack={backToHub} />
+      </FadeInView>
+    );
   }
 
   return (
     <SafeAreaView style={styles.container}>
+      <FadeInView style={styles.flexFill} key={currentScreen}>
       {/* 1. PROFILE SELECT SCREEN */}
       {currentScreen === 'profile_select' && (
         <View style={styles.screenWrapper}>
@@ -360,6 +379,8 @@ function AppContent() {
         </View>
       )}
 
+      </FadeInView>
+
       {/* CREATE PROFILE MODAL */}
       <Modal
         animationType="slide"
@@ -582,6 +603,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  flexFill: {
+    flex: 1,
   },
   screenWrapper: {
     flex: 1,

@@ -11,6 +11,7 @@ import {
 import { COLORS, SHADOWS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { useApp } from '../../state/AppContext';
+import { Celebration } from '../../components/Celebration';
 import { useGameSession } from '../shared/useGameSession';
 import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
 import {
@@ -40,11 +41,11 @@ interface AttentionItem {
   isTarget: boolean;
 }
 
-const MEMORY_EMOJIS = ['🐶', '🐱', '🐸', '🐼', '🦁', '🐨', '🦊', '🐰'];
-const ATTENTION_EMOJIS = ['🍎', '🍌', '🍓', '🍇', '🍉', '🍍', '🍊', '🍒'];
+const MEMORY_EMOJIS = ['🐶', '🐱', '🐸', '🐼', '🦁', '🐨', '🦊', '🐰', '🐵', '🐯', '🐧', '🐙'];
+const ATTENTION_EMOJIS = ['🍎', '🍌', '🍓', '🍇', '🍉', '🍍', '🍊', '🍒', '🥝', '🥥', '🍑', '🍐'];
 
 const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => 0.5 - Math.random());
-// Pairs/items scale Basic -> Advanced.
+// Pairs/items scale Basic -> Master.
 const pairsForLevel = (level: number) => Math.min(1 + level, MEMORY_EMOJIS.length);
 const itemsForLevel = (level: number) => Math.min(2 + level, ATTENTION_EMOJIS.length);
 
@@ -64,12 +65,19 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [lockBoard, setLockBoard] = useState(false);
   const [boardCols, setBoardCols] = useState(2);
+  const [previewing, setPreviewing] = useState(false);
 
   // Attention mode
   const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
   const [targetEmoji, setTargetEmoji] = useState('');
 
   const flipAnims = useRef<{ [key: string]: Animated.Value }>({}).current;
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear any pending peek timer on unmount.
+  useEffect(() => () => {
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+  }, []);
 
   const initializeMatchGame = useCallback(() => {
     const numPairs = pairsForLevel(session.level);
@@ -84,9 +92,34 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
     );
     setCards(shuffled);
     setSelectedIndices([]);
-    setLockBoard(false);
-    setMascotExpr('happy');
-    setMascotMsg(`Can you match all ${numPairs} pairs?`);
+
+    // PEEK PHASE: reveal every card, let the child memorize, then hide them.
+    setPreviewing(true);
+    setLockBoard(true);
+    setMascotExpr('thinking');
+    setMascotMsg('👀 Peek! Remember where the pairs are…');
+    shuffled.forEach(c =>
+      Animated.timing(flipAnims[c.id], {
+        toValue: 180,
+        duration: 250,
+        useNativeDriver: true,
+      }).start(),
+    );
+    const peekMs = 1000 + numPairs * 350; // longer peek for harder boards
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    previewTimer.current = setTimeout(() => {
+      shuffled.forEach(c =>
+        Animated.timing(flipAnims[c.id], {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }).start(),
+      );
+      setPreviewing(false);
+      setLockBoard(false);
+      setMascotExpr('happy');
+      setMascotMsg(`Now match all ${numPairs} pairs!`);
+    }, peekMs);
   }, [session.level, flipAnims]);
 
   const initializeAttentionGame = useCallback(() => {
@@ -256,7 +289,7 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
         />
         <TutorialCard
           title="Memory & Attention 🃏"
-          body="Flip cards to find matching pairs, or spot the target item among others. More pairs and items appear as you level up!"
+          body="First all the cards show for a quick peek — memorize them! Then they hide and you find the matching pairs. Or switch to Spot the Target. More cards appear as you level up!"
           themeColor={COLORS.memory}
           onStart={() => setStarted(true)}
         />
@@ -267,6 +300,7 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
   return (
     <View style={styles.container}>
       <GameHeader title="Memory & Attention" themeColor={COLORS.memory} stars={session.stars} onBack={onBack} />
+      <Celebration trigger={session.correctPulse} />
       <View style={styles.gameContent}>
         <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
 
@@ -293,6 +327,11 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
 
         <View style={styles.boardWrapper}>
           <SessionBar session={session} themeColor={COLORS.memory} />
+          {gameSubMode === 'match' && previewing && (
+            <View style={styles.peekBanner}>
+              <Text style={styles.peekText}>👀 Memorize the cards!</Text>
+            </View>
+          )}
           {gameSubMode === 'match' ? (
             <FlatList
               data={cards}
@@ -349,6 +388,14 @@ const styles = StyleSheet.create({
     padding: 16,
     ...SHADOWS.medium,
   },
+  peekBanner: {
+    backgroundColor: '#FFF3E0',
+    borderRadius: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  peekText: { fontSize: 14, fontWeight: 'bold', color: COLORS.secondary },
   gridContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
   cardContainer: {
     width: (width - 90) / 3,

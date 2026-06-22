@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { COLORS, SHADOWS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { useApp } from '../../state/AppContext';
+import { Celebration } from '../../components/Celebration';
 import { useGameSession } from '../shared/useGameSession';
 import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
 import {
@@ -108,8 +109,9 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
     setMascotMsg(
       q.mode === 'count' ? 'How many do you see?' : 'What number comes next?',
     );
+    // Regenerate only on a new round — never mid-question on a level shift.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.round, session.level, started]);
+  }, [session.round, started]);
 
   const handlePick = useCallback(
     (choice: number) => {
@@ -171,6 +173,7 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
   return (
     <View style={styles.container}>
       <GameHeader title="Numbers & Counting" themeColor={COLORS.numbers} stars={session.stars} onBack={onBack} />
+      <Celebration trigger={session.correctPulse} />
       <View style={styles.content}>
         <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
         <GameBody>

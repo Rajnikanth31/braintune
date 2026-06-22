@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { COLORS, SHADOWS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
+import { Celebration } from '../../components/Celebration';
 import { GameSession } from './useGameSession';
 import { badgeById, levelLabel } from './progression';
 
@@ -133,6 +134,7 @@ export const GameSuccess: React.FC<GameSuccessProps> = ({
   onBack,
 }) => (
   <ScrollView contentContainerStyle={styles.successContent}>
+    <Celebration trigger={1} intensity="big" />
     <Mascot expression="cheering" message="You did it! 🎉" size={140} />
 
     <View style={styles.statsCard}>

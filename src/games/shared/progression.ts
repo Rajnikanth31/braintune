@@ -12,8 +12,8 @@
 
 import { ChildProfile, ChildStats } from '../../storage/db';
 
-/** Number of difficulty levels every game exposes (Basic .. Advanced). */
-export const MAX_LEVEL = 5;
+/** Number of difficulty levels every game exposes (Basic .. Master). */
+export const MAX_LEVEL = 8;
 
 /** Rounds played in a single session before it completes. */
 export const ROUNDS_PER_SESSION = 5;
@@ -23,8 +23,11 @@ export const LEVEL_LABELS = [
   'Basic',
   'Easy',
   'Medium',
+  'Tricky',
   'Hard',
-  'Advanced',
+  'Super',
+  'Expert',
+  'Master',
 ] as const;
 
 export function levelLabel(level: number): string {
@@ -240,8 +243,8 @@ const totalSessions = (stats: ChildStats): number =>
 const gamesPlayed = (stats: ChildStats): number =>
   Object.values(stats).filter(g => (g.sessionsPlayed || 0) > 0).length;
 
-const reachedAdvanced = (stats: ChildStats): boolean =>
-  Object.values(stats).some(g => (g.highestDifficultyReached || 1) >= MAX_LEVEL);
+const reachedLevel = (stats: ChildStats, level: number): boolean =>
+  Object.values(stats).some(g => (g.highestDifficultyReached || 1) >= level);
 
 export const BADGES: BadgeDef[] = [
   {
@@ -276,8 +279,15 @@ export const BADGES: BadgeDef[] = [
     id: 'sharp_mind',
     name: 'Sharp Mind',
     emoji: '🧠',
-    description: 'Reach the Advanced level in any game.',
-    earned: ({ stats }) => reachedAdvanced(stats),
+    description: 'Reach the Hard level in any game.',
+    earned: ({ stats }) => reachedLevel(stats, 5),
+  },
+  {
+    id: 'grand_master',
+    name: 'Grand Master',
+    emoji: '👑',
+    description: 'Reach the Master level in any game.',
+    earned: ({ stats }) => reachedLevel(stats, MAX_LEVEL),
   },
   {
     id: 'on_fire',

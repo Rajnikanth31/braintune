@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useApp } from '../../state/AppContext';
 import { MAX_LEVEL, ROUNDS_PER_SESSION, nextDifficulty } from './progression';
+import { haptic } from '../../audio/haptics';
 
 export interface UseGameSessionOptions {
   gameId: string;
@@ -23,6 +24,8 @@ export interface GameSession {
   accuracy: number;
   isComplete: boolean;
   newBadges: string[];
+  /** Increments on every correct answer — drive a celebration burst off this. */
+  correctPulse: number;
   /** Record one answer. Returns whether it was correct (for convenience). */
   recordAnswer: (isCorrect: boolean, starsAwarded?: number) => boolean;
   /** Advance to the next round, or finish + save the session on the last round. */
@@ -44,7 +47,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     adaptive = true,
   } = options;
 
-  const { updateGameResult } = useApp();
+  const { updateGameResult, settings } = useApp();
 
   const [level, setLevel] = useState(startLevel);
   const [round, setRound] = useState(1);
@@ -55,6 +58,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
   const [bestStreak, setBestStreak] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
   const [newBadges, setNewBadges] = useState<string[]>([]);
+  const [correctPulse, setCorrectPulse] = useState(0);
 
   // Refs mirror the latest values so completeRound/finish use fresh numbers
   // without depending on stale closures.
@@ -89,10 +93,14 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
         setCorrect(correctRef.current);
         starsRef.current += starsAwarded;
         setStars(starsRef.current);
+        setCorrectPulse(p => p + 1);
       }
+
+      // Tactile feedback (gentle; respects the sound/feedback preference).
+      haptic(isCorrect ? 'success' : 'error', settings.soundEffectsEnabled);
       return isCorrect;
     },
-    [adaptive, maxLevel],
+    [adaptive, maxLevel, settings.soundEffectsEnabled],
   );
 
   const finish = useCallback(async () => {
@@ -134,6 +142,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     setRound(1);
     setIsComplete(false);
     setNewBadges([]);
+    setCorrectPulse(0);
   }, [startLevel]);
 
   const setLevelExternal = useCallback((n: number) => {
@@ -155,6 +164,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     accuracy: total > 0 ? Math.round((correct / total) * 100) : 100,
     isComplete,
     newBadges,
+    correctPulse,
     recordAnswer,
     completeRound,
     restart,

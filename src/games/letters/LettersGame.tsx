@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { COLORS, SHADOWS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { useApp } from '../../state/AppContext';
+import { Celebration } from '../../components/Celebration';
 import { useGameSession } from '../shared/useGameSession';
 import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
 import {
@@ -28,15 +29,21 @@ const PHONICS: { letter: string; word: string; emoji: string }[] = [
   { letter: 'F', word: 'Fish', emoji: '🐟' },
   { letter: 'G', word: 'Grapes', emoji: '🍇' },
   { letter: 'H', word: 'Hat', emoji: '🎩' },
+  { letter: 'I', word: 'Ice cream', emoji: '🍦' },
+  { letter: 'K', word: 'Key', emoji: '🔑' },
   { letter: 'L', word: 'Lion', emoji: '🦁' },
   { letter: 'M', word: 'Moon', emoji: '🌙' },
+  { letter: 'P', word: 'Pizza', emoji: '🍕' },
+  { letter: 'R', word: 'Rocket', emoji: '🚀' },
   { letter: 'S', word: 'Sun', emoji: '☀️' },
   { letter: 'T', word: 'Tree', emoji: '🌳' },
+  { letter: 'U', word: 'Umbrella', emoji: '☂️' },
+  { letter: 'W', word: 'Whale', emoji: '🐳' },
 ];
 
 const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => 0.5 - Math.random());
 const optionsForLevel = (level: number): number =>
-  Math.min(2 + level, PHONICS.length); // L1=3 ... L5=6+
+  Math.min(2 + level, 8); // L1=3 ... caps at 8 buttons
 
 interface Question {
   prompt: { word: string; emoji: string };
@@ -71,16 +78,17 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
   const [mascotExpr, setMascotExpr] = useState<MascotExpression>('thinking');
   const [mascotMsg, setMascotMsg] = useState('Which letter makes this sound?');
 
-  // New question whenever the round or difficulty changes.
+  // New question only on a fresh round (not when adaptive difficulty shifts
+  // mid-question), so the current question is never swapped before answering.
   useEffect(() => {
     if (!started) return;
     setQuestion(makeQuestion(session.level));
     setLocked(false);
     setPicked(null);
     setMascotExpr('thinking');
-    setMascotMsg('Which letter does this word start with?');
+    setMascotMsg('Look at the picture. Which letter does it start with?');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.round, session.level, started]);
+  }, [session.round, started]);
 
   const handlePick = useCallback(
     (choice: string) => {
@@ -141,7 +149,7 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
         />
         <TutorialCard
           title="Letters & Phonics 🅰"
-          body="A word and picture will appear. Tap the letter that the word starts with! Get a few right in a row to level up."
+          body="A picture will appear. Tap the letter its name starts with — then the word is revealed! Get a few right in a row to level up."
           themeColor={COLORS.letters}
           onStart={() => setStarted(true)}
         />
@@ -157,6 +165,7 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
         stars={session.stars}
         onBack={onBack}
       />
+      <Celebration trigger={session.correctPulse} />
       <View style={styles.content}>
         <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
         <GameBody>
@@ -164,7 +173,11 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
 
           <View style={styles.promptCard}>
             <Text style={styles.promptEmoji}>{question.prompt.emoji}</Text>
-            <Text style={styles.promptWord}>{question.prompt.word}</Text>
+            {picked ? (
+              <Text style={styles.promptWord}>{question.prompt.word}</Text>
+            ) : (
+              <Text style={styles.promptHint}>Tap the first letter…</Text>
+            )}
           </View>
 
           <View style={styles.choices}>
@@ -211,6 +224,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: COLORS.text,
+    marginTop: 8,
+  },
+  promptHint: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: COLORS.textMuted,
     marginTop: 8,
   },
   choices: {

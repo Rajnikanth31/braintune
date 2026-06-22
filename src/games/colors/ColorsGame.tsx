@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { COLORS, SHADOWS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { useApp } from '../../state/AppContext';
+import { Celebration } from '../../components/Celebration';
 import { useGameSession } from '../shared/useGameSession';
 import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
 import {
@@ -25,6 +26,8 @@ const PALETTE = [
   { name: 'Yellow', hex: '#FFCA28' },
   { name: 'Purple', hex: '#AB47BC' },
   { name: 'Orange', hex: '#FF7043' },
+  { name: 'Pink', hex: '#EC407A' },
+  { name: 'Brown', hex: '#8D6E63' },
 ];
 
 const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => 0.5 - Math.random());
@@ -106,8 +109,9 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
         ? `Tap the ${q.targetName} one!`
         : 'What color comes next in the pattern?',
     );
+    // Regenerate only on a new round — never mid-question on a level shift.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.round, session.level, started]);
+  }, [session.round, started]);
 
   const handlePick = useCallback(
     (hex: string) => {
@@ -169,6 +173,7 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
   return (
     <View style={styles.container}>
       <GameHeader title="Colors & Shapes" themeColor={COLORS.colors} stars={session.stars} onBack={onBack} />
+      <Celebration trigger={session.correctPulse} />
       <View style={styles.content}>
         <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
         <GameBody>

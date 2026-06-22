@@ -5,6 +5,18 @@ All notable changes to Braintune are documented here. This project follows
 
 ## [Unreleased]
 
+### Game feel / "juice" (round 3)
+- **Celebration particles:** rising stars + confetti burst on every correct answer, and a bigger burst on the session-complete screen (`Celebration` component, shared across all games).
+- **Haptic feedback:** gentle vibration on correct/incorrect answers via the built-in Vibration API (no new dependency), gated by the Sound Effects setting.
+- **Screen transitions:** soft fade-and-slide between screens and when launching games (`FadeInView`).
+- All juice honors the **Reduced Motion** accessibility setting (particles/animation disabled, instant appearance).
+
+### Gameplay improvements (round 2)
+- **Memory match "peek" phase:** every card is revealed first so the child can memorize the layout, then the cards hide and matching begins. Peek time scales with board size.
+- **No more premature question changes:** Letters/Numbers/Colors now regenerate a question only on a new round, never when adaptive difficulty shifts mid-question — so feedback is always shown before the next question.
+- **Letters is now picture-first:** only the picture shows; the word is revealed after the child taps a letter.
+- **More levels & content:** difficulty levels raised from 5 to **8** (Basic→Master), with expanded letter/color/emoji pools and a new **Grand Master** badge.
+
 ### Fixed
 - **Parent Zone crash:** `DB` was used but not imported in `App.tsx` (`TS2304`). Imported and hardened the async stats load.
 - **Memory game adaptive difficulty:** corrected stale-streak off-by-one and a mid-round board-rebuild race; card state now updated immutably.
