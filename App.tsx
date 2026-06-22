@@ -20,6 +20,15 @@ import { LettersGame } from './src/games/letters/LettersGame';
 import { NumbersGame } from './src/games/numbers/NumbersGame';
 import { ColorsGame } from './src/games/colors/ColorsGame';
 import { GAME_REGISTRY } from './src/games/GameRegistry';
+import { DB, ChildStats } from './src/storage/db';
+import {
+  levelProgress,
+  highestUnlockedLevel,
+  levelLabel,
+  MAX_LEVEL,
+  BADGES,
+  badgeById,
+} from './src/games/shared/progression';
 
 // List of fun avatar emojis for children profiles
 const AVATARS = ['🦊', '🐨', '🐰', '🐯', '🐼', '🦁', '🐻', '🦄', '🐸', '🐵'];
@@ -39,6 +48,7 @@ function AppContent() {
   const {
     profiles,
     activeProfile,
+    activeStats,
     settings,
     createProfile,
     selectProfile,
@@ -190,37 +200,60 @@ function AppContent() {
               size={110}
             />
 
+            <PlayerProgressCard
+              xp={activeProfile.xp}
+              streak={activeProfile.streak}
+              badges={activeProfile.badges}
+            />
+
             <Text style={styles.sectionTitle}>Your Play Center</Text>
 
             <View style={styles.gamesGrid}>
-              {GAME_REGISTRY.map(game => (
-                <TouchableOpacity
-                  key={game.id}
-                  style={[
-                    styles.gameCard,
-                    { borderLeftColor: game.themeColor, borderLeftWidth: 6 },
-                  ]}
-                  onPress={() => launchGame(game.id)}
-                >
-                  <View style={styles.gameCardHeader}>
-                    <Text style={styles.gameCardTitle}>{game.name}</Text>
-                    {game.id === 'memory' ? (
-                      <View style={styles.refBadge}>
-                        <Text style={styles.refBadgeText}>Reference</Text>
+              {GAME_REGISTRY.map(game => {
+                const stat = activeStats?.[game.id];
+                const unlocked = highestUnlockedLevel(stat);
+                return (
+                  <TouchableOpacity
+                    key={game.id}
+                    style={[
+                      styles.gameCard,
+                      { borderLeftColor: game.themeColor, borderLeftWidth: 6 },
+                    ]}
+                    onPress={() => launchGame(game.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${game.name}, unlocked up to ${levelLabel(unlocked)} level`}
+                  >
+                    <View style={styles.gameCardHeader}>
+                      <Text style={styles.gameCardTitle}>{game.name}</Text>
+                      <View style={[styles.levelBadge, { backgroundColor: game.themeColor }]}>
+                        <Text style={styles.levelBadgeText}>
+                          Lvl {unlocked}/{MAX_LEVEL}
+                        </Text>
                       </View>
-                    ) : (
-                      <View style={[styles.refBadge, styles.scaffoldBadge]}>
-                        <Text style={styles.refBadgeText}>Scaffold</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.gameCardDesc}>{game.description}</Text>
-                  <View style={styles.gameCardFooter}>
-                    <Text style={styles.gameCardAge}>Ages {game.minAge}+</Text>
-                    <Text style={styles.playArrow}>Play Now ▶</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+                    </View>
+                    <Text style={styles.gameCardDesc}>{game.description}</Text>
+                    <View style={styles.levelDots}>
+                      {Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map(l => (
+                        <View
+                          key={l}
+                          style={[
+                            styles.levelDot,
+                            l <= unlocked && { backgroundColor: game.themeColor },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                    <View style={styles.gameCardFooter}>
+                      <Text style={styles.gameCardAge}>
+                        {stat && stat.sessionsPlayed > 0
+                          ? `${stat.sessionsPlayed} plays · ${stat.successRate}% accuracy`
+                          : `Ages ${game.minAge}+ · New!`}
+                      </Text>
+                      <Text style={styles.playArrow}>Play Now ▶</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </ScrollView>
         </View>
@@ -290,10 +323,36 @@ function AppContent() {
                 <TouchableOpacity
                   style={[styles.toggleBtn, settings.voiceInstructionsEnabled ? styles.toggleOn : styles.toggleOff]}
                   onPress={() => updateSettings({ voiceInstructionsEnabled: !settings.voiceInstructionsEnabled })}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: settings.voiceInstructionsEnabled }}
                 >
                   <Text style={styles.toggleText}>{settings.voiceInstructionsEnabled ? 'ON' : 'OFF'}</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+
+            {/* Accessibility */}
+            <Text style={styles.parentSectionTitle}>Accessibility</Text>
+            <View style={styles.settingsCard}>
+              <SettingToggle
+                title="High Contrast"
+                desc="Stronger colors for better visibility"
+                value={settings.highContrast}
+                onToggle={() => updateSettings({ highContrast: !settings.highContrast })}
+              />
+              <SettingToggle
+                title="Reduced Motion"
+                desc="Calm down animations and transitions"
+                value={settings.reducedMotion}
+                onToggle={() => updateSettings({ reducedMotion: !settings.reducedMotion })}
+              />
+              <SettingToggle
+                title="Larger Text"
+                desc="Increase text size across the app"
+                value={settings.largeText}
+                onToggle={() => updateSettings({ largeText: !settings.largeText })}
+                last
+              />
             </View>
 
             <View style={{ height: 40 }} />
@@ -376,19 +435,90 @@ function AppContent() {
   );
 }
 
+// Player progress card shown on the hub (level, XP bar, streak, badges).
+const PlayerProgressCard: React.FC<{
+  xp: number;
+  streak: number;
+  badges: string[];
+}> = ({ xp, streak, badges }) => {
+  const lp = levelProgress(xp);
+  return (
+    <View style={styles.progressCard}>
+      <View style={styles.progressTopRow}>
+        <View style={styles.levelCircle}>
+          <Text style={styles.levelCircleNum}>{lp.level}</Text>
+          <Text style={styles.levelCircleLabel}>LEVEL</Text>
+        </View>
+        <View style={styles.progressMid}>
+          <Text style={styles.progressXpText}>
+            {lp.isMaxLevel
+              ? 'Max level reached! 🌟'
+              : `${lp.xpIntoLevel} / ${lp.xpForNextLevel} XP to next level`}
+          </Text>
+          <View style={styles.xpBarTrack}>
+            <View style={[styles.xpBarFill, { width: `${Math.round(lp.progress * 100)}%` }]} />
+          </View>
+        </View>
+        <View style={styles.streakChip}>
+          <Text style={styles.streakNum}>🔥 {streak}</Text>
+          <Text style={styles.streakLabel}>day{streak === 1 ? '' : 's'}</Text>
+        </View>
+      </View>
+      <Text style={styles.badgesInline}>
+        🏅 {badges.length} / {BADGES.length} badges earned
+      </Text>
+    </View>
+  );
+};
+
+const GAME_META: Record<string, string> = {
+  memory: '🃏 Memory',
+  letters: '🅰 Letters',
+  numbers: '🔢 Numbers',
+  colors: '🎨 Colors',
+};
+
+// Reusable settings row with an ON/OFF toggle.
+const SettingToggle: React.FC<{
+  title: string;
+  desc: string;
+  value: boolean;
+  onToggle: () => void;
+  last?: boolean;
+}> = ({ title, desc, value, onToggle, last }) => (
+  <View style={[styles.settingRow, last ? { borderBottomWidth: 0 } : null]}>
+    <View>
+      <Text style={styles.settingTitle}>{title}</Text>
+      <Text style={styles.settingDesc}>{desc}</Text>
+    </View>
+    <TouchableOpacity
+      style={[styles.toggleBtn, value ? styles.toggleOn : styles.toggleOff]}
+      onPress={onToggle}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value }}
+      accessibilityLabel={title}
+    >
+      <Text style={styles.toggleText}>{value ? 'ON' : 'OFF'}</Text>
+    </TouchableOpacity>
+  </View>
+);
+
 // Subcomponent: Child analytics report card
 const ChildReportCard: React.FC<{ profile: any }> = ({ profile }) => {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<ChildStats | null>(null);
 
   React.useEffect(() => {
-    const loadStats = async () => {
-      const data = await DB.getChildStats(profile.id);
-      setStats(data);
+    let mounted = true;
+    DB.getChildStats(profile.id).then(data => {
+      if (mounted) setStats(data);
+    });
+    return () => {
+      mounted = false;
     };
-    loadStats();
   }, [profile.id]);
 
   if (!stats) return null;
+  const lp = levelProgress(profile.xp || 0);
 
   return (
     <View style={styles.reportCard}>
@@ -396,27 +526,54 @@ const ChildReportCard: React.FC<{ profile: any }> = ({ profile }) => {
         <Text style={styles.reportAvatar}>{profile.avatar}</Text>
         <View>
           <Text style={styles.reportName}>{profile.name}</Text>
-          <Text style={styles.reportPlayed}>Last played: {new Date(profile.lastPlayed).toLocaleDateString()}</Text>
+          <Text style={styles.reportPlayed}>
+            Last played: {new Date(profile.lastPlayed).toLocaleDateString()}
+          </Text>
         </View>
         <View style={styles.reportBadge}>
-          <Text style={styles.reportBadgeText}>⭐ {profile.stars} stars</Text>
+          <Text style={styles.reportBadgeText}>⭐ {profile.stars}</Text>
         </View>
       </View>
 
+      <View style={styles.reportSummaryRow}>
+        <Text style={styles.reportSummaryItem}>Level {lp.level}</Text>
+        <Text style={styles.reportSummaryItem}>🔥 {profile.streak || 0} day streak</Text>
+        <Text style={styles.reportSummaryItem}>
+          🏅 {(profile.badges || []).length} badges
+        </Text>
+      </View>
+
       <Text style={styles.statsTableHeader}>Learning Performance</Text>
-      
+
       {Object.values(stats).map((g: any) => (
         <View key={g.gameId} style={styles.statDetailRow}>
-          <Text style={styles.statGameName}>
-            {g.gameId === 'memory' ? '🃏 Memory' : g.gameId === 'letters' ? '🅰 Letters' : g.gameId === 'numbers' ? '🔢 Numbers' : '🎨 Colors'}
-          </Text>
+          <Text style={styles.statGameName}>{GAME_META[g.gameId] || g.gameId}</Text>
           <View style={styles.statSubRow}>
             <Text style={styles.statSubVal}>Played: {g.sessionsPlayed}</Text>
             <Text style={styles.statSubVal}>Accuracy: {g.successRate}%</Text>
-            <Text style={styles.statSubVal}>Max Lvl: {g.highestDifficultyReached}</Text>
+            <Text style={styles.statSubVal}>
+              Max: {levelLabel(g.highestDifficultyReached)}
+            </Text>
           </View>
         </View>
       ))}
+
+      {(profile.badges || []).length > 0 && (
+        <>
+          <Text style={styles.statsTableHeader}>Badges Earned</Text>
+          <View style={styles.reportBadgeRow}>
+            {profile.badges.map((id: string) => {
+              const b = badgeById(id);
+              if (!b) return null;
+              return (
+                <Text key={id} style={styles.reportBadgeEmoji} accessibilityLabel={b.name}>
+                  {b.emoji}
+                </Text>
+              );
+            })}
+          </View>
+        </>
+      )}
     </View>
   );
 };
@@ -598,19 +755,79 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.text,
   },
-  refBadge: {
-    backgroundColor: COLORS.accent,
+  levelBadge: {
     paddingVertical: 3,
     paddingHorizontal: 8,
     borderRadius: 8,
   },
-  scaffoldBadge: {
-    backgroundColor: COLORS.border,
-  },
-  refBadgeText: {
+  levelBadgeText: {
     color: '#FFF',
     fontSize: 10,
     fontWeight: 'bold',
+  },
+  levelDots: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 12,
+  },
+  levelDot: {
+    width: 18,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.border,
+  },
+  // Player progress card
+  progressCard: {
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 4,
+    ...SHADOWS.small,
+  },
+  progressTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  levelCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  levelCircleNum: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
+  levelCircleLabel: { color: '#FFF', fontSize: 8, fontWeight: 'bold', letterSpacing: 1 },
+  progressMid: { flex: 1 },
+  progressXpText: { fontSize: 12, color: COLORS.textMuted, marginBottom: 6, fontWeight: '600' },
+  xpBarTrack: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  xpBarFill: {
+    height: '100%',
+    borderRadius: 6,
+    backgroundColor: COLORS.success,
+  },
+  streakChip: {
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    borderRadius: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  streakNum: { fontSize: 15, fontWeight: 'bold', color: COLORS.secondary },
+  streakLabel: { fontSize: 10, color: COLORS.textMuted },
+  badgesInline: {
+    marginTop: 12,
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textMuted,
   },
   gameCardDesc: {
     fontSize: 13,
@@ -699,6 +916,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     color: COLORS.text,
+  },
+  reportSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  reportSummaryItem: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  reportBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingVertical: 6,
+  },
+  reportBadgeEmoji: {
+    fontSize: 24,
   },
   statsTableHeader: {
     fontSize: 13,

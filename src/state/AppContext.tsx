@@ -15,7 +15,7 @@ interface AppContextType {
     correctTaps: number,
     totalTaps: number,
     difficultyLevel: number
-  ) => Promise<void>;
+  ) => Promise<{ newBadges: string[] }>;
   updateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
   refreshProfiles: () => Promise<void>;
 }
@@ -30,6 +30,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     soundEffectsEnabled: true,
     musicEnabled: true,
     voiceInstructionsEnabled: true,
+    highContrast: false,
+    reducedMotion: false,
+    largeText: false,
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -87,7 +90,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const selectProfile = async (id: string | null) => {
     await DB.setActiveProfileId(id);
     if (id) {
-      const profile = profiles.find(p => p.id === id) || null;
+      // Recompute badges so migrated/legacy profiles reflect what they earned.
+      await DB.syncBadges(id);
+      const list = await DB.getProfiles();
+      setProfiles(list);
+      const profile = list.find(p => p.id === id) || null;
       setActiveProfile(profile);
       if (profile) {
         const stats = await DB.getChildStats(profile.id);
@@ -108,9 +115,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     totalTaps: number,
     difficultyLevel: number
   ) => {
-    if (!activeProfile) return;
+    if (!activeProfile) return { newBadges: [] };
 
-    await DB.updateGameSession(
+    const result = await DB.updateGameSession(
       activeProfile.id,
       gameId,
       starsEarned,
@@ -118,11 +125,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       totalTaps,
       difficultyLevel
     );
-    
+
     // Refresh local state
     await refreshProfiles();
     const updatedStats = await DB.getChildStats(activeProfile.id);
     setActiveStats(updatedStats);
+    return { newBadges: result.newBadges };
   };
 
   const updateSettings = async (newSettings: Partial<AppSettings>) => {

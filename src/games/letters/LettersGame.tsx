@@ -1,121 +1,236 @@
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { COLORS, SHADOWS } from '../../theme/colors';
-import { Mascot } from '../../components/Mascot';
+import { Mascot, MascotExpression } from '../../components/Mascot';
+import { useApp } from '../../state/AppContext';
+import { useGameSession } from '../shared/useGameSession';
+import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
+import {
+  GameHeader,
+  SessionBar,
+  LevelPicker,
+  GameSuccess,
+  GameBody,
+  TutorialCard,
+} from '../shared/GameShell';
 
 interface LettersGameProps {
   onBack: () => void;
 }
 
+// Phonics: each letter with a friendly example word + emoji.
+const PHONICS: { letter: string; word: string; emoji: string }[] = [
+  { letter: 'A', word: 'Apple', emoji: '🍎' },
+  { letter: 'B', word: 'Ball', emoji: '⚽' },
+  { letter: 'C', word: 'Cat', emoji: '🐱' },
+  { letter: 'D', word: 'Dog', emoji: '🐶' },
+  { letter: 'E', word: 'Egg', emoji: '🥚' },
+  { letter: 'F', word: 'Fish', emoji: '🐟' },
+  { letter: 'G', word: 'Grapes', emoji: '🍇' },
+  { letter: 'H', word: 'Hat', emoji: '🎩' },
+  { letter: 'L', word: 'Lion', emoji: '🦁' },
+  { letter: 'M', word: 'Moon', emoji: '🌙' },
+  { letter: 'S', word: 'Sun', emoji: '☀️' },
+  { letter: 'T', word: 'Tree', emoji: '🌳' },
+];
+
+const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => 0.5 - Math.random());
+const optionsForLevel = (level: number): number =>
+  Math.min(2 + level, PHONICS.length); // L1=3 ... L5=6+
+
+interface Question {
+  prompt: { word: string; emoji: string };
+  answer: string;
+  choices: string[];
+}
+
+function makeQuestion(level: number): Question {
+  const pool = shuffle(PHONICS);
+  const target = pool[0];
+  const numChoices = optionsForLevel(level);
+  const distractors = pool
+    .filter(p => p.letter !== target.letter)
+    .slice(0, numChoices - 1)
+    .map(p => p.letter);
+  return {
+    prompt: { word: target.word, emoji: target.emoji },
+    answer: target.letter,
+    choices: shuffle([target.letter, ...distractors]),
+  };
+}
+
 export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
+  const { activeStats } = useApp();
+  const unlocked = highestUnlockedLevel(activeStats?.letters);
+
+  const session = useGameSession({ gameId: 'letters', startLevel: 1 });
+  const [started, setStarted] = useState(false);
+  const [question, setQuestion] = useState<Question>(() => makeQuestion(1));
+  const [locked, setLocked] = useState(false);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [mascotExpr, setMascotExpr] = useState<MascotExpression>('thinking');
+  const [mascotMsg, setMascotMsg] = useState('Which letter makes this sound?');
+
+  // New question whenever the round or difficulty changes.
+  useEffect(() => {
+    if (!started) return;
+    setQuestion(makeQuestion(session.level));
+    setLocked(false);
+    setPicked(null);
+    setMascotExpr('thinking');
+    setMascotMsg('Which letter does this word start with?');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.round, session.level, started]);
+
+  const handlePick = useCallback(
+    (choice: string) => {
+      if (locked) return;
+      setPicked(choice);
+      const correct = choice === question.answer;
+      session.recordAnswer(correct, 1);
+      if (correct) {
+        setLocked(true);
+        setMascotExpr('cheering');
+        setMascotMsg(`Yes! ${question.prompt.word} starts with ${question.answer}! ⭐`);
+        setTimeout(() => session.completeRound(), 1100);
+      } else {
+        setMascotExpr('neutral');
+        setMascotMsg('Not quite — listen again and try another!');
+      }
+    },
+    [locked, question, session],
+  );
+
+  if (session.isComplete) {
+    return (
+      <View style={styles.container}>
+        <GameHeader
+          title="Letters & Phonics"
+          themeColor={COLORS.letters}
+          stars={session.stars}
+          onBack={onBack}
+        />
+        <GameSuccess
+          session={session}
+          themeColor={COLORS.letters}
+          onRestart={() => {
+            session.restart();
+            setStarted(true);
+          }}
+          onBack={onBack}
+        />
+      </View>
+    );
+  }
+
+  if (!started) {
+    return (
+      <View style={styles.container}>
+        <GameHeader
+          title="Letters & Phonics"
+          themeColor={COLORS.letters}
+          stars={0}
+          onBack={onBack}
+        />
+        <LevelPicker
+          maxLevel={MAX_LEVEL}
+          unlocked={unlocked}
+          selected={session.level}
+          themeColor={COLORS.letters}
+          onSelect={session.setLevel}
+        />
+        <TutorialCard
+          title="Letters & Phonics 🅰"
+          body="A word and picture will appear. Tap the letter that the word starts with! Get a few right in a row to level up."
+          themeColor={COLORS.letters}
+          onStart={() => setStarted(true)}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
-          <Text style={styles.backButtonText}>◀ Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Letters & Phonics</Text>
-      </View>
-
+      <GameHeader
+        title="Letters & Phonics"
+        themeColor={COLORS.letters}
+        stars={session.stars}
+        onBack={onBack}
+      />
       <View style={styles.content}>
-        <Mascot expression="thinking" message="We are learning letters and sounds soon!" size={120} />
-        
-        <View style={styles.scaffoldCard}>
-          <Text style={styles.scaffoldTitle}>Mini-Game Scaffolding</Text>
-          <Text style={styles.scaffoldDescription}>
-            This module is reserved for Letters & Phonics. Here children will trace letters, match sounds, and click sound letters!
-          </Text>
-          <View style={styles.iconPlaceholder}>
-            <Text style={styles.largeLetter}>A</Text>
-            <Text style={styles.largeLetter}>B</Text>
-            <Text style={styles.largeLetter}>C</Text>
+        <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
+        <GameBody>
+          <SessionBar session={session} themeColor={COLORS.letters} />
+
+          <View style={styles.promptCard}>
+            <Text style={styles.promptEmoji}>{question.prompt.emoji}</Text>
+            <Text style={styles.promptWord}>{question.prompt.word}</Text>
           </View>
-        </View>
+
+          <View style={styles.choices}>
+            {question.choices.map(letter => {
+              const isPicked = picked === letter;
+              const isAnswer = letter === question.answer;
+              const showCorrect = locked && isAnswer;
+              const showWrong = isPicked && !isAnswer;
+              return (
+                <TouchableOpacity
+                  key={letter}
+                  style={[
+                    styles.letterBtn,
+                    showCorrect && styles.correctBtn,
+                    showWrong && styles.wrongBtn,
+                  ]}
+                  onPress={() => handlePick(letter)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Letter ${letter}`}
+                >
+                  <Text style={styles.letterText}>{letter}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </GameBody>
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1, backgroundColor: COLORS.background },
+  content: { flex: 1, padding: 16, alignItems: 'center' },
+  promptCard: {
+    alignItems: 'center',
     backgroundColor: COLORS.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 50,
-    paddingHorizontal: 20,
-    paddingBottom: 15,
-    backgroundColor: COLORS.letters,
-    ...SHADOWS.small,
-  },
-  backButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  backButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  title: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFF',
-    textAlign: 'center',
-    marginRight: 60, // Balance the back button spacing
-  },
-  content: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scaffoldCard: {
-    backgroundColor: COLORS.cardBackground,
-    borderRadius: 24,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.letters,
-    marginTop: 20,
-    ...SHADOWS.medium,
-  },
-  scaffoldTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: 12,
-  },
-  scaffoldDescription: {
-    fontSize: 15,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    lineHeight: 22,
+    borderRadius: 20,
+    paddingVertical: 20,
     marginBottom: 20,
   },
-  iconPlaceholder: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  largeLetter: {
-    fontSize: 36,
+  promptEmoji: { fontSize: 72 },
+  promptWord: {
+    fontSize: 24,
     fontWeight: 'bold',
-    color: COLORS.letters,
-    backgroundColor: COLORS.background,
-    width: 60,
-    height: 60,
-    textAlign: 'center',
-    lineHeight: 60,
-    borderRadius: 16,
+    color: COLORS.text,
+    marginTop: 8,
+  },
+  choices: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 14,
+  },
+  letterBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
     borderWidth: 2,
     borderColor: COLORS.letters,
+    backgroundColor: COLORS.cardBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.small,
   },
+  correctBtn: { backgroundColor: COLORS.correctGreen, borderColor: COLORS.success },
+  wrongBtn: { backgroundColor: COLORS.incorrectRed, borderColor: COLORS.secondary },
+  letterText: { fontSize: 32, fontWeight: 'bold', color: COLORS.letters },
 });

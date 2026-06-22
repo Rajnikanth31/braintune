@@ -1,4 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  xpForStars,
+  levelForXp,
+  updateStreak,
+  dayKey,
+  evaluateBadges,
+  newlyEarnedBadges,
+} from '../games/shared/progression';
 
 export interface ChildProfile {
   id: string;
@@ -7,6 +15,11 @@ export interface ChildProfile {
   stars: number; // Total stars earned
   completedSessions: number;
   lastPlayed: string; // ISO string
+  xp: number; // Lifetime experience points (drives global level)
+  level: number; // Global player level derived from xp
+  streak: number; // Consecutive-day play streak
+  lastDayKey?: string; // Local day key (YYYY-MM-DD) of last play
+  badges: string[]; // Earned badge ids
 }
 
 export interface GameStat {
@@ -32,20 +45,48 @@ export interface AppSettings {
   soundEffectsEnabled: boolean;
   musicEnabled: boolean;
   voiceInstructionsEnabled: boolean;
+  // Accessibility options
+  highContrast: boolean;
+  reducedMotion: boolean;
+  largeText: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   soundEffectsEnabled: true,
   musicEnabled: true,
   voiceInstructionsEnabled: true,
+  highContrast: false,
+  reducedMotion: false,
+  largeText: false,
 };
+
+/** Ensure a stored profile has every field the current app expects. */
+function normalizeProfile(p: Partial<ChildProfile> & { id: string }): ChildProfile {
+  const stars = p.stars ?? 0;
+  const xp = p.xp ?? xpForStars(stars); // derive XP for pre-XP saves
+  return {
+    id: p.id,
+    name: p.name ?? 'Friend',
+    avatar: p.avatar ?? '🦊',
+    stars,
+    completedSessions: p.completedSessions ?? 0,
+    lastPlayed: p.lastPlayed ?? new Date().toISOString(),
+    xp,
+    level: levelForXp(xp),
+    streak: p.streak ?? 0,
+    lastDayKey: p.lastDayKey,
+    badges: Array.isArray(p.badges) ? p.badges : [],
+  };
+}
 
 export const DB = {
   // Profiles
   async getProfiles(): Promise<ChildProfile[]> {
     try {
       const data = await AsyncStorage.getItem(KEYS.PROFILES);
-      return data ? JSON.parse(data) : [];
+      const parsed: ChildProfile[] = data ? JSON.parse(data) : [];
+      // Backfill fields added in later versions so older saves keep working.
+      return parsed.map(normalizeProfile);
     } catch (e) {
       console.error('Failed to get profiles', e);
       return [];
@@ -69,6 +110,11 @@ export const DB = {
       stars: 0,
       completedSessions: 0,
       lastPlayed: new Date().toISOString(),
+      xp: 0,
+      level: 1,
+      streak: 0,
+      lastDayKey: undefined,
+      badges: [],
     };
     profiles.push(newProfile);
     await this.saveProfiles(profiles);
@@ -133,7 +179,7 @@ export const DB = {
     correctTaps: number,
     totalTaps: number,
     difficultyLevel: number
-  ): Promise<void> {
+  ): Promise<{ newBadges: string[]; profile?: ChildProfile }> {
     try {
       // 1. Update stats for this game
       const stats = await this.getChildStats(childId);
@@ -162,17 +208,50 @@ export const DB = {
       };
       await this.saveChildStats(childId, stats);
 
-      // 2. Update profile star count and completed sessions
+      // 2. Update profile: stars, XP, level, streak, sessions, badges.
       const profiles = await this.getProfiles();
       const profileIndex = profiles.findIndex(p => p.id === childId);
       if (profileIndex > -1) {
-        profiles[profileIndex].stars += starsEarned;
-        profiles[profileIndex].completedSessions += 1;
-        profiles[profileIndex].lastPlayed = new Date().toISOString();
+        const profile = profiles[profileIndex];
+        profile.stars += starsEarned;
+        profile.xp += xpForStars(starsEarned);
+        profile.level = levelForXp(profile.xp);
+        profile.completedSessions += 1;
+
+        const streakResult = updateStreak(profile.streak, profile.lastDayKey);
+        profile.streak = streakResult.streak;
+        profile.lastDayKey = dayKey();
+        profile.lastPlayed = new Date().toISOString();
+
+        // Award any newly earned badges.
+        const fresh = newlyEarnedBadges({ profile, stats }, profile.badges);
+        if (fresh.length) {
+          profile.badges = [...profile.badges, ...fresh];
+        }
+
+        profiles[profileIndex] = profile;
         await this.saveProfiles(profiles);
+        return { newBadges: fresh, profile };
       }
+      return { newBadges: [], profile: undefined };
     } catch (e) {
       console.error(`Failed to update game session for child ${childId}`, e);
+      return { newBadges: [], profile: undefined };
+    }
+  },
+
+  /** Recompute and persist the full badge set for a child (used on load). */
+  async syncBadges(childId: string): Promise<void> {
+    try {
+      const profiles = await this.getProfiles();
+      const idx = profiles.findIndex(p => p.id === childId);
+      if (idx < 0) return;
+      const stats = await this.getChildStats(childId);
+      const earned = evaluateBadges({ profile: profiles[idx], stats });
+      profiles[idx].badges = earned;
+      await this.saveProfiles(profiles);
+    } catch (e) {
+      console.error(`Failed to sync badges for child ${childId}`, e);
     }
   },
 
