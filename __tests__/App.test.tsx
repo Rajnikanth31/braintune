@@ -36,10 +36,19 @@ jest.mock('react-native-safe-area-context', () => {
 
 // Mock Mascot to prevent looping animations in tests
 jest.mock('../src/components/Mascot', () => {
-  const React = require('react');
+  const react = require('react');
   const { Text } = require('react-native');
   return {
-    Mascot: () => React.createElement(Text, null, 'Mascot Mock'),
+    Mascot: () => react.createElement(Text, null, 'Mascot Mock'),
+  };
+});
+
+// Mock AnimatedBackground to prevent looping animations in tests
+jest.mock('../src/components/AnimatedBackground', () => {
+  const react = require('react');
+  const { Text } = require('react-native');
+  return {
+    AnimatedBackground: () => react.createElement(Text, null, 'AnimatedBackground Mock'),
   };
 });
 

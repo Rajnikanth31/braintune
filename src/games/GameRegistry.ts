@@ -40,4 +40,12 @@ export const GAME_REGISTRY: MiniGameConfig[] = [
     iconName: 'th-large',
     minAge: 4,
   },
+  {
+    id: 'math',
+    name: 'Math & Logic',
+    description: 'Add, subtract, multiply and divide — grows from counting to big-kid challenges!',
+    themeColor: '#26C6DA', // Teal
+    iconName: 'plus',
+    minAge: 5,
+  },
 ];

@@ -32,6 +32,7 @@ const emptyStats = (): ChildStats => ({
   letters: { gameId: 'letters', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
   numbers: { gameId: 'numbers', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
   colors: { gameId: 'colors', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
+  math: { gameId: 'math', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
 });
 
 describe('XP and levels', () => {
@@ -123,9 +124,9 @@ describe('Badges', () => {
     const fresh = newlyEarnedBadges({ profile: makeProfile(), stats }, ['first_steps']);
     expect(fresh).not.toContain('first_steps');
   });
-  test('explorer requires all four games played', () => {
+  test('explorer requires all five games played', () => {
     const stats = emptyStats();
-    (['memory', 'letters', 'numbers', 'colors'] as const).forEach(g => {
+    (['memory', 'letters', 'numbers', 'colors', 'math'] as const).forEach(g => {
       stats[g].sessionsPlayed = 1;
     });
     expect(evaluateBadges({ profile: makeProfile(), stats })).toContain('explorer');

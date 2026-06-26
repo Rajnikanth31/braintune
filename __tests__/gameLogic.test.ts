@@ -19,14 +19,15 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 describe('Braintune Game Registry & Data Layer', () => {
-  test('Game registry contains all 4 mini-games', () => {
-    expect(GAME_REGISTRY.length).toBe(4);
+  test('Game registry contains all 5 mini-games', () => {
+    expect(GAME_REGISTRY.length).toBe(5);
     
     const gameIds = GAME_REGISTRY.map(g => g.id);
     expect(gameIds).toContain('memory');
     expect(gameIds).toContain('letters');
     expect(gameIds).toContain('numbers');
     expect(gameIds).toContain('colors');
+    expect(gameIds).toContain('math');
   });
 
   test('Game registry items have correct properties', () => {

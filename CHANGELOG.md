@@ -5,6 +5,12 @@ All notable changes to Braintune are documented here. This project follows
 
 ## [Unreleased]
 
+### Stability, Math & visuals (round 5)
+- **Crash guard:** added a top-level `ErrorBoundary` that catches JS errors and shows a friendly recovery screen **with the error text** (so a failing device can be screenshotted) instead of a white-screen crash.
+- **New Math & Logic game:** counting → addition → subtraction → multiplication → division → two-step problems, scaling Basic→Master so the app now suits roughly ages 4–15.
+- **Animated background:** soft floating shapes drift behind the menu screens (honors Reduced Motion).
+- See `docs/CRASH_DIAGNOSIS.md` for capturing the on-device crash log (needed to pin the reported launch crash).
+
 ### Audio (round 4)
 - **Background music + sound effects:** looping music while playing, plus click / correct / wrong / win cues, via a new crash-safe `SoundService` (wraps `react-native-sound`; no-ops safely until the native module is rebuilt).
 - **Controlled by the existing settings:** the Parent Zone **Background Music** and **Sound Effects** toggles drive audio live.

@@ -15,12 +15,15 @@ import { COLORS, SHADOWS } from './src/theme/colors';
 import { AppProvider, useApp } from './src/state/AppContext';
 import { Mascot } from './src/components/Mascot';
 import { FadeInView } from './src/components/FadeInView';
+import { AnimatedBackground } from './src/components/AnimatedBackground';
 import { ParentGate } from './src/components/ParentGate';
 import { SoundService } from './src/audio/SoundService';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { MemoryGame } from './src/games/memory/MemoryGame';
 import { LettersGame } from './src/games/letters/LettersGame';
 import { NumbersGame } from './src/games/numbers/NumbersGame';
 import { ColorsGame } from './src/games/colors/ColorsGame';
+import { MathGame } from './src/games/math/MathGame';
 import { GAME_REGISTRY } from './src/games/GameRegistry';
 import { DB, ChildStats } from './src/storage/db';
 import {
@@ -37,12 +40,14 @@ const AVATARS = ['🦊', '🐨', '🐰', '🐯', '🐼', '🦁', '🐻', '🦄',
 
 function App() {
   return (
-    <SafeAreaProvider>
-      <AppProvider>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-        <AppContent />
-      </AppProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <AppProvider>
+          <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+          <AppContent />
+        </AppProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -58,7 +63,7 @@ function AppContent() {
   } = useApp();
 
   const [currentScreen, setCurrentScreen] = useState<
-    'profile_select' | 'hub' | 'memory_game' | 'letters_game' | 'numbers_game' | 'colors_game' | 'parent_zone'
+    'profile_select' | 'hub' | 'memory_game' | 'letters_game' | 'numbers_game' | 'colors_game' | 'math_game' | 'parent_zone'
   >('profile_select');
 
   // Modal / Gate controls
@@ -102,6 +107,7 @@ function AppContent() {
     if (gameId === 'letters') setCurrentScreen('letters_game');
     if (gameId === 'numbers') setCurrentScreen('numbers_game');
     if (gameId === 'colors') setCurrentScreen('colors_game');
+    if (gameId === 'math') setCurrentScreen('math_game');
   };
 
   // Preload audio clips once.
@@ -161,8 +167,17 @@ function AppContent() {
     );
   }
 
+  if (currentScreen === 'math_game') {
+    return (
+      <FadeInView style={styles.container} key="math_game">
+        <MathGame onBack={backToHub} />
+      </FadeInView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
+      <AnimatedBackground />
       <FadeInView style={styles.flexFill} key={currentScreen}>
       {/* 1. PROFILE SELECT SCREEN */}
       {currentScreen === 'profile_select' && (
@@ -522,6 +537,7 @@ const GAME_META: Record<string, string> = {
   letters: '🅰 Letters',
   numbers: '🔢 Numbers',
   colors: '🎨 Colors',
+  math: '➕ Math',
 };
 
 // Reusable settings row with an ON/OFF toggle.

@@ -23,6 +23,7 @@ export const COLORS = {
   letters: '#5D9CEC', // Blue
   numbers: '#FC6E51', // Coral
   colors: '#A0D468', // Green
+  math: '#26C6DA', // Teal
 };
 
 export const SHADOWS = {

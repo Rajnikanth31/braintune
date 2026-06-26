@@ -272,8 +272,8 @@ export const BADGES: BadgeDef[] = [
     id: 'explorer',
     name: 'Explorer',
     emoji: '🧭',
-    description: 'Try all four games.',
-    earned: ({ stats }) => gamesPlayed(stats) >= 4,
+    description: 'Try all five games.',
+    earned: ({ stats }) => gamesPlayed(stats) >= 5,
   },
   {
     id: 'sharp_mind',

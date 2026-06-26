@@ -156,6 +156,7 @@ export const DB = {
         numbers: { gameId: 'numbers', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
         colors: { gameId: 'colors', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
         memory: { gameId: 'memory', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
+        math: { gameId: 'math', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
       };
       return defaultStats;
     } catch (e) {
