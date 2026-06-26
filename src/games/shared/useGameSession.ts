@@ -48,7 +48,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     rounds = ROUNDS_PER_SESSION,
     startLevel = 1,
     maxLevel = MAX_LEVEL,
-    adaptive = true,
+    adaptive = false,
   } = options;
 
   const { updateGameResult, settings } = useApp();

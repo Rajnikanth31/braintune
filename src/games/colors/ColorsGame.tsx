@@ -230,12 +230,13 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
 
   useEffect(() => {
     if (!started) return;
-    setQuestion(makeQuestion(session.level));
+    const q = makeQuestion(session.level);
+    setQuestion(q);
     setLocked(false);
     setPickedId(null);
     setMascotExpr('thinking');
-    setMascotMsg(question.promptText);
-  }, [session.round, started]);
+    setMascotMsg(q.promptText);
+  }, [session.round, session.level, started]);
 
   const handlePick = useCallback(
     (choice: Choice) => {

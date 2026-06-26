@@ -5,6 +5,20 @@ All notable changes to Braintune are documented here. This project follows
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-06-26
+
+### Fixed
+- **Memory Game Crashes**: Imported the missing `ScrollView` in `MemoryGame.tsx` which caused ReferenceError crashes when switching to "Spot the Target" mode.
+- **Easy/Hard Mixing**: Disabled adaptive difficulty by default, keeping the challenge level steady at what the user selected.
+- **Level 5 Progression Lock**: Decoupled level unlocking from the lifetime cumulative success rate in `db.ts` and `progression.ts`. Now, players unlock the next level immediately by passing their current highest level with >= 60% accuracy in the active session. Full backward compatibility is maintained for legacy profiles.
+- **React Hook Dependency Warnings**: Fixed all React Hook `useEffect` dependency warning errors in `ColorsGame.tsx`, `LettersGame.tsx`, `MathGame.tsx`, and `NumbersGame.tsx` to clear ESLint code quality checks.
+
+### Changed
+- **Hub Level UI**: Replaced the horizontal overflow 20 dots indicator with a single clean, responsive level progress bar inside the hub game cards.
+
+### Added
+- **3D Card Flips**: Added true 3D rotation with 3D perspective (`perspective: 800`) and angle-interpolated opacity transitions to the Memory Game. This provides real depth animations and resolves the Android `backfaceVisibility` mirroring bugs.
+
 ### Stability, Math & visuals (round 5)
 - **Crash guard:** added a top-level `ErrorBoundary` that catches JS errors and shows a friendly recovery screen **with the error text** (so a failing device can be screenshotted) instead of a white-screen crash.
 - **New Math & Logic game:** counting → addition → subtraction → multiplication → division → two-step problems, scaling Basic→Master so the app now suits roughly ages 4–15.

@@ -144,14 +144,15 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
 
   useEffect(() => {
     if (!started) return;
-    setQuestion(makeQuestion(session.level));
+    const q = makeQuestion(session.level);
+    setQuestion(q);
     setLocked(false);
     setPicked(null);
     setMascotExpr('thinking');
     setMascotMsg(
-      question.mode === 'count' ? 'How many do you see?' : 'What number comes next?',
+      q.mode === 'count' ? 'How many do you see?' : 'What number comes next?',
     );
-  }, [session.round, started]);
+  }, [session.round, session.level, started]);
 
   const handlePick = useCallback(
     (choice: number) => {

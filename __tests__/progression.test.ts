@@ -85,6 +85,10 @@ describe('Level unlocking', () => {
     const stat = { sessionsPlayed: 2, successRate: 40, highestDifficultyReached: 2 };
     expect(highestUnlockedLevel(stat)).toBe(2);
   });
+  test('unlocks up to highestDifficultyReached even if cumulative success rate is low', () => {
+    const stat = { sessionsPlayed: 10, successRate: 30, highestDifficultyReached: 5 };
+    expect(highestUnlockedLevel(stat)).toBe(5);
+  });
   test('never exceeds MAX_LEVEL', () => {
     const stat = { sessionsPlayed: 9, successRate: 100, highestDifficultyReached: MAX_LEVEL };
     expect(highestUnlockedLevel(stat)).toBe(MAX_LEVEL);

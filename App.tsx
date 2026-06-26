@@ -291,16 +291,16 @@ function AppContent() {
                       </View>
                     </View>
                     <Text style={styles.gameCardDesc}>{game.description}</Text>
-                    <View style={styles.levelDots}>
-                      {Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map(l => (
-                        <View
-                          key={l}
-                          style={[
-                            styles.levelDot,
-                            l <= unlocked && { backgroundColor: game.themeColor },
-                          ]}
-                        />
-                      ))}
+                    <View style={styles.progressBarContainer}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          {
+                            width: `${(unlocked / MAX_LEVEL) * 100}%`,
+                            backgroundColor: game.themeColor,
+                          },
+                        ]}
+                      />
                     </View>
                     <View style={styles.gameCardFooter}>
                       <Text style={styles.gameCardAge}>
@@ -830,16 +830,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-  levelDots: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 12,
-  },
-  levelDot: {
-    width: 18,
-    height: 6,
-    borderRadius: 3,
+  progressBarContainer: {
+    height: 8,
+    borderRadius: 4,
     backgroundColor: COLORS.border,
+    overflow: 'hidden',
+    marginBottom: 12,
+    marginTop: 4,
+    width: '100%',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
   },
   // Player progress card
   progressCard: {

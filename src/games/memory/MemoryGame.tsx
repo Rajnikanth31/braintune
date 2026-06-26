@@ -7,6 +7,7 @@ import {
   FlatList,
   Animated,
   Dimensions,
+  ScrollView,
 } from 'react-native';
 import { COLORS, SHADOWS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
@@ -66,7 +67,7 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
   const { activeStats } = useApp();
   const unlocked = highestUnlockedLevel(activeStats?.memory);
 
-  const session = useGameSession({ gameId: 'memory', startLevel: 1 });
+  const session = useGameSession({ gameId: 'memory', startLevel: 1, adaptive: false });
   const [started, setStarted] = useState(false);
   const [gameSubMode, setGameSubMode] = useState<'match' | 'attention'>('match');
 
@@ -261,6 +262,13 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
       ? anim.interpolate({ inputRange: [0, 180], outputRange: ['180deg', '360deg'] })
       : '180deg';
 
+    const frontOpacity = anim
+      ? anim.interpolate({ inputRange: [0, 89, 90, 180], outputRange: [1, 1, 0, 0] })
+      : 1;
+    const backOpacity = anim
+      ? anim.interpolate({ inputRange: [0, 90, 91, 180], outputRange: [0, 0, 1, 1] })
+      : 0;
+
     const cardSideSize = getCardSize();
 
     return (
@@ -275,14 +283,24 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
           style={[
             styles.cardSide,
             styles.cardBack,
-            { transform: [{ rotateY: rotateYBack }] },
+            {
+              transform: [{ perspective: 800 }, { rotateY: rotateYBack }],
+              opacity: backOpacity,
+            },
             item.isMatched ? styles.cardMatched : null,
           ]}
         >
           <Text style={[styles.cardEmoji, { fontSize: cardSideSize * 0.45 }]}>{item.emoji}</Text>
         </Animated.View>
         <Animated.View
-          style={[styles.cardSide, styles.cardFront, { transform: [{ rotateY }] }]}
+          style={[
+            styles.cardSide,
+            styles.cardFront,
+            {
+              transform: [{ perspective: 800 }, { rotateY }],
+              opacity: frontOpacity,
+            },
+          ]}
         >
           <Text style={[styles.cardQuestion, { fontSize: cardSideSize * 0.4 }]}>?</Text>
         </Animated.View>

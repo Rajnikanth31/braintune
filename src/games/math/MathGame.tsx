@@ -5,7 +5,7 @@ import { Mascot, MascotExpression } from '../../components/Mascot';
 import { useApp } from '../../state/AppContext';
 import { Celebration } from '../../components/Celebration';
 import { useGameSession } from '../shared/useGameSession';
-import { MAX_LEVEL, highestUnlockedLevel, levelLabel } from '../shared/progression';
+import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
 import {
   GameHeader,
   SessionBar,
@@ -165,7 +165,7 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
     setPicked(null);
     setMascotExpr('thinking');
     setMascotMsg('What is the answer?');
-  }, [session.round, started]);
+  }, [session.round, session.level, started]);
 
   const handlePick = useCallback(
     (choice: number) => {

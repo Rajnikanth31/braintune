@@ -123,7 +123,7 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
     setPicked(null);
     setMascotExpr('thinking');
     setMascotMsg('Look at the picture. Which letter fits?');
-  }, [session.round, started]);
+  }, [session.round, session.level, started]);
 
   const handlePick = useCallback(
     (choice: string) => {

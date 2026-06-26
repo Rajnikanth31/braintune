@@ -6,6 +6,8 @@ import {
   dayKey,
   evaluateBadges,
   newlyEarnedBadges,
+  MAX_LEVEL,
+  UNLOCK_ACCURACY,
 } from '../games/shared/progression';
 
 export interface ChildProfile {
@@ -205,12 +207,20 @@ export const DB = {
       const newCorrect = prevCorrectTaps + correctTaps;
       const newRate = newTotal > 0 ? Math.round((newCorrect / newTotal) * 100) : 100;
 
+      const sessionAccuracy = totalTaps > 0 ? (correctTaps / totalTaps) * 100 : 100;
+      const passed = sessionAccuracy >= UNLOCK_ACCURACY;
+      const nextUnlockedLevel = passed ? difficultyLevel + 1 : difficultyLevel;
+      const newHighest = Math.min(
+        Math.max(gameStat.highestDifficultyReached, nextUnlockedLevel),
+        MAX_LEVEL
+      );
+
       stats[gameId] = {
         gameId,
         starsEarned: gameStat.starsEarned + starsEarned,
         sessionsPlayed: newSessions,
         successRate: newRate,
-        highestDifficultyReached: Math.max(gameStat.highestDifficultyReached, difficultyLevel),
+        highestDifficultyReached: newHighest,
       };
       await this.saveChildStats(childId, stats);
 

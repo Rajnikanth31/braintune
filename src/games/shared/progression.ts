@@ -176,14 +176,19 @@ export function highestUnlockedLevel(gameStat?: {
   successRate: number;
   highestDifficultyReached: number;
 }): number {
-  if (!gameStat || gameStat.sessionsPlayed < UNLOCK_SESSIONS) {
+  if (!gameStat) {
     return 1;
   }
-  // The child can play one level beyond the highest they have reached,
-  // provided their accuracy clears the bar.
-  const reached = Math.min(gameStat.highestDifficultyReached, MAX_LEVEL);
-  const canAdvance = gameStat.successRate >= UNLOCK_ACCURACY;
-  const unlocked = canAdvance ? reached + 1 : reached;
+  if (gameStat.sessionsPlayed === 0) {
+    return 1;
+  }
+  // Backward compatibility: legacy profiles that saved before this change
+  // might have unlocked highestDifficultyReached + 1 if their cumulative successRate >= 60%
+  const legacyUnlocked = gameStat.successRate >= UNLOCK_ACCURACY
+    ? gameStat.highestDifficultyReached + 1
+    : gameStat.highestDifficultyReached;
+  
+  const unlocked = Math.max(gameStat.highestDifficultyReached, legacyUnlocked);
   return Math.min(Math.max(unlocked, 1), MAX_LEVEL);
 }
 
