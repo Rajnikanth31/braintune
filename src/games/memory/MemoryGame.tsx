@@ -20,6 +20,7 @@ import {
   LevelPicker,
   GameSuccess,
   TutorialCard,
+  PauseMenu,
 } from '../shared/GameShell';
 
 const { width } = Dimensions.get('window');
@@ -42,12 +43,24 @@ interface AttentionItem {
 }
 
 const MEMORY_EMOJIS = ['🐶', '🐱', '🐸', '🐼', '🦁', '🐨', '🦊', '🐰', '🐵', '🐯', '🐧', '🐙'];
-const ATTENTION_EMOJIS = ['🍎', '🍌', '🍓', '🍇', '🍉', '🍍', '🍊', '🍒', '🥝', '🥥', '🍑', '🍐'];
+const ATTENTION_EMOJIS = ['🍎', '🍌', '🍓', '🍇', '🍉', '🍍', '🍊', '🍒', '🥝', '🥥', '🍑', '🍐', '🍔', '🍕', '🍩', '🍪', '🎈', '🎁', '🎈', '🎨', '🧸', '🎺', '🎸', '✈️'];
 
 const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => 0.5 - Math.random());
-// Pairs/items scale Basic -> Master.
-const pairsForLevel = (level: number) => Math.min(1 + level, MEMORY_EMOJIS.length);
-const itemsForLevel = (level: number) => Math.min(2 + level, ATTENTION_EMOJIS.length);
+
+// Scale pairs and attention items up to 20 levels
+const pairsForLevel = (level: number) => {
+  if (level <= 5) return 1 + level; // L1=2..L5=6 pairs
+  if (level <= 10) return 6; // L6-10=6 pairs
+  if (level <= 15) return 8; // L11-15=8 pairs
+  return Math.min(8 + (level - 15) * 2, MEMORY_EMOJIS.length); // L16-20=10..12 pairs
+};
+
+const itemsForLevel = (level: number) => {
+  if (level <= 5) return 3 + level; // L1=4..L5=8 items
+  if (level <= 10) return 8 + (level - 5); // L6-10=9..13 items
+  if (level <= 15) return 13 + (level - 10); // L11-15=14..18 items
+  return Math.min(18 + (level - 15), ATTENTION_EMOJIS.length); // L16-20=19..24 items
+};
 
 export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
   const { activeStats } = useApp();
@@ -66,6 +79,7 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
   const [lockBoard, setLockBoard] = useState(false);
   const [boardCols, setBoardCols] = useState(2);
   const [previewing, setPreviewing] = useState(false);
+  const [paused, setPaused] = useState(false);
 
   // Attention mode
   const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
@@ -81,7 +95,13 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
 
   const initializeMatchGame = useCallback(() => {
     const numPairs = pairsForLevel(session.level);
-    setBoardCols(numPairs <= 2 ? 2 : 3);
+    
+    // Choose columns dynamically based on number of cards
+    if (numPairs <= 2) setBoardCols(2);
+    else if (numPairs <= 4) setBoardCols(3);
+    else if (numPairs <= 8) setBoardCols(4);
+    else setBoardCols(5);
+
     const selectedEmojis = shuffle(MEMORY_EMOJIS).slice(0, numPairs);
     const shuffled = shuffle([...selectedEmojis, ...selectedEmojis]).map(
       (emoji, index) => {
@@ -224,6 +244,14 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
     }
   };
 
+  // Calculate card sizing dynamically so they fit on all device dimensions
+  const getCardSize = () => {
+    const horizontalPadding = 48;
+    const spacing = 16;
+    const availableWidth = width - horizontalPadding - ((boardCols - 1) * spacing);
+    return Math.min(availableWidth / boardCols, 84); // cap max card size
+  };
+
   const renderCardItem = ({ item, index }: { item: Card; index: number }) => {
     const anim = flipAnims[item.id];
     const rotateY = anim
@@ -232,9 +260,12 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
     const rotateYBack = anim
       ? anim.interpolate({ inputRange: [0, 180], outputRange: ['180deg', '360deg'] })
       : '180deg';
+
+    const cardSideSize = getCardSize();
+
     return (
       <TouchableOpacity
-        style={styles.cardContainer}
+        style={[styles.cardContainer, { width: cardSideSize, height: cardSideSize }]}
         onPress={() => handleCardPress(index)}
         activeOpacity={0.8}
         accessibilityRole="button"
@@ -248,12 +279,12 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
             item.isMatched ? styles.cardMatched : null,
           ]}
         >
-          <Text style={styles.cardEmoji}>{item.emoji}</Text>
+          <Text style={[styles.cardEmoji, { fontSize: cardSideSize * 0.45 }]}>{item.emoji}</Text>
         </Animated.View>
         <Animated.View
           style={[styles.cardSide, styles.cardFront, { transform: [{ rotateY }] }]}
         >
-          <Text style={styles.cardQuestion}>?</Text>
+          <Text style={[styles.cardQuestion, { fontSize: cardSideSize * 0.4 }]}>?</Text>
         </Animated.View>
       </TouchableOpacity>
     );
@@ -289,7 +320,7 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
         />
         <TutorialCard
           title="Memory & Attention 🃏"
-          body="First all the cards show for a quick peek — memorize them! Then they hide and you find the matching pairs. Or switch to Spot the Target. More cards appear as you level up!"
+          body="First, all the cards show for a quick peek — memorize them! Then they hide and you find the matching pairs. Or switch to Spot the Target. Grids grow up to 5x6 for a legendary advanced challenge!"
           themeColor={COLORS.memory}
           onStart={() => setStarted(true)}
         />
@@ -299,10 +330,26 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
 
   return (
     <View style={styles.container}>
-      <GameHeader title="Memory & Attention" themeColor={COLORS.memory} stars={session.stars} onBack={onBack} />
+      <GameHeader
+        title="Memory & Attention"
+        themeColor={COLORS.memory}
+        stars={session.stars}
+        onBack={onBack}
+        onPause={() => setPaused(true)}
+      />
       <Celebration trigger={session.correctPulse} />
+      <PauseMenu
+        visible={paused}
+        themeColor={COLORS.memory}
+        onResume={() => setPaused(false)}
+        onRestart={() => {
+          setPaused(false);
+          session.restart();
+        }}
+        onExit={onBack}
+      />
       <View style={styles.gameContent}>
-        <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
+        <Mascot expression={mascotExpr} message={mascotMsg} size={90} />
 
         <View style={styles.modeTabs}>
           <TouchableOpacity
@@ -342,19 +389,21 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
               contentContainerStyle={styles.gridContainer}
             />
           ) : (
-            <View style={styles.attentionGrid}>
-              {attentionItems.map(item => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.attentionItemCard}
-                  onPress={() => handleAttentionPress(item)}
-                  accessibilityRole="button"
-                  accessibilityLabel={item.emoji}
-                >
-                  <Text style={styles.attentionEmoji}>{item.emoji}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <ScrollView contentContainerStyle={styles.attentionScroll}>
+              <View style={styles.attentionGrid}>
+                {attentionItems.map(item => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.attentionItemCard}
+                    onPress={() => handleAttentionPress(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.emoji}
+                  >
+                    <Text style={styles.attentionEmoji}>{item.emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
           )}
         </View>
       </View>
@@ -375,9 +424,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     ...SHADOWS.small,
   },
-  tab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 12 },
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 12 },
   activeTab: { backgroundColor: COLORS.background, borderBottomWidth: 3, borderBottomColor: COLORS.memory },
-  tabText: { fontSize: 14, fontWeight: '600', color: COLORS.textMuted },
+  tabText: { fontSize: 13, fontWeight: '600', color: COLORS.textMuted },
   activeTabText: { color: COLORS.text, fontWeight: 'bold' },
   boardWrapper: {
     flex: 1,
@@ -395,21 +444,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  peekText: { fontSize: 14, fontWeight: 'bold', color: COLORS.secondary },
+  peekText: { fontSize: 13, fontWeight: 'bold', color: COLORS.secondary },
   gridContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
   cardContainer: {
-    width: (width - 90) / 3,
-    height: (width - 90) / 3,
-    margin: 8,
+    margin: 6,
     position: 'relative',
-    maxWidth: 100,
-    maxHeight: 100,
   },
   cardSide: {
     position: 'absolute',
     width: '100%',
     height: '100%',
-    borderRadius: 20,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
     backfaceVisibility: 'hidden',
@@ -418,27 +463,30 @@ const styles = StyleSheet.create({
   },
   cardFront: { backgroundColor: COLORS.primary, borderColor: '#4A90E2' },
   cardBack: { backgroundColor: COLORS.cardBackground, borderColor: COLORS.memory },
-  cardQuestion: { fontSize: 32, fontWeight: 'bold', color: '#FFF' },
-  cardEmoji: { fontSize: 38 },
+  cardQuestion: { fontWeight: 'bold', color: '#FFF' },
+  cardEmoji: {},
   cardMatched: { backgroundColor: COLORS.correctGreen, borderColor: COLORS.success },
+  attentionScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
   attentionGrid: {
-    flex: 1,
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    alignContent: 'center',
-    gap: 16,
+    gap: 12,
+    paddingVertical: 8,
   },
   attentionItemCard: {
-    width: 80,
-    height: 80,
+    width: 64,
+    height: 64,
     backgroundColor: COLORS.background,
     borderWidth: 2,
     borderColor: COLORS.border,
-    borderRadius: 20,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     ...SHADOWS.small,
   },
-  attentionEmoji: { fontSize: 40 },
+  attentionEmoji: { fontSize: 32 },
 });

@@ -13,13 +13,24 @@ import {
   GameSuccess,
   GameBody,
   TutorialCard,
+  PauseMenu,
 } from '../shared/GameShell';
 
 interface ColorsGameProps {
   onBack: () => void;
 }
 
-const PALETTE = [
+interface ColorItem {
+  name: string;
+  hex: string;
+}
+
+interface ShapeItem {
+  name: string;
+  emoji: string;
+}
+
+const PALETTE: ColorItem[] = [
   { name: 'Red', hex: '#EF5350' },
   { name: 'Blue', hex: '#42A5F5' },
   { name: 'Green', hex: '#66BB6A' },
@@ -30,58 +41,177 @@ const PALETTE = [
   { name: 'Brown', hex: '#8D6E63' },
 ];
 
+const SHAPES: ShapeItem[] = [
+  { name: 'Circle', emoji: '🔴' },
+  { name: 'Triangle', emoji: '🔺' },
+  { name: 'Square', emoji: '🟩' },
+  { name: 'Star', emoji: '⭐️' },
+  { name: 'Diamond', emoji: '🔶' },
+  { name: 'Heart', emoji: '❤️' },
+  { name: 'Moon', emoji: '🌙' },
+  { name: 'Cross', emoji: '➕' },
+];
+
 const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => 0.5 - Math.random());
-const numChoices = (level: number) => Math.min(2 + level, PALETTE.length); // L1=3..L4+=6
+const numChoices = (level: number) => Math.min(3 + Math.floor(level / 5), 6);
 
-type Mode = 'match' | 'pattern';
+type GameMode = 'color' | 'shape_color' | 'pattern_color' | 'pattern_shape';
 
-interface Swatch {
-  name: string;
+interface Choice {
+  id: string;
+  text: string;
   hex: string;
+  emoji: string;
+  isShapeColor?: boolean;
 }
+
 interface Question {
-  mode: Mode;
-  targetName: string;
-  answerHex: string;
-  choices: Swatch[];
-  pattern: string[]; // hex sequence for pattern mode
+  mode: GameMode;
+  promptText: string;
+  targetHex: string;
+  targetEmoji: string;
+  choices: Choice[];
+  pattern: Choice[]; // hex sequence for pattern mode
 }
 
 function makeQuestion(level: number): Question {
-  const choices = numChoices(level);
-  const pool = shuffle(PALETTE);
-  // Pattern questions appear from level 3 onward.
-  const mode: Mode = level >= 3 && Math.random() > 0.5 ? 'pattern' : 'match';
+  const choicesCount = numChoices(level);
+  const colorPool = shuffle(PALETTE);
+  const shapePool = shuffle(SHAPES);
 
-  if (mode === 'pattern') {
-    // Simple ABAB (or ABCABC at higher levels) repeating pattern.
-    const usePeriod3 = level >= 4 && Math.random() > 0.5;
-    const base = pool.slice(0, usePeriod3 ? 3 : 2);
-    const reps = 2;
-    const full: string[] = [];
-    for (let r = 0; r < reps; r++) base.forEach(b => full.push(b.hex));
-    const answer = base[full.length % base.length];
-    const shown = full; // child predicts the next item
-    const distractors = pool
-      .filter(p => p.hex !== answer.hex)
-      .slice(0, choices - 1);
+  let mode: GameMode = 'color';
+  if (level <= 5) {
+    mode = level >= 4 ? 'pattern_color' : 'color';
+  } else if (level <= 10) {
+    mode = level >= 8 ? 'pattern_color' : 'shape_color';
+  } else if (level <= 15) {
+    mode = level >= 13 ? 'pattern_shape' : 'shape_color';
+  } else {
+    mode = Math.random() > 0.5 ? 'pattern_shape' : 'shape_color';
+  }
+
+  if (mode === 'color') {
+    const target = colorPool[0];
+    const distractors = colorPool.filter(c => c.hex !== target.hex).slice(0, choicesCount - 1);
+    const finalChoices = shuffle([target, ...distractors]).map(c => ({
+      id: c.hex,
+      text: c.name,
+      hex: c.hex,
+      emoji: '■',
+    }));
+
     return {
       mode,
-      targetName: 'next',
-      answerHex: answer.hex,
-      choices: shuffle([answer, ...distractors]),
-      pattern: shown,
+      promptText: `Tap the ${target.name} box!`,
+      targetHex: target.hex,
+      targetEmoji: '',
+      choices: finalChoices,
+      pattern: [],
     };
   }
 
-  const target = pool[0];
-  const distractors = pool.filter(p => p.hex !== target.hex).slice(0, choices - 1);
+  if (mode === 'shape_color') {
+    const targetColor = colorPool[0];
+    const targetShape = shapePool[0];
+    
+    // Choose distractors: mix matching color/diff shape or diff color/matching shape
+    const finalChoices: Choice[] = [];
+    finalChoices.push({
+      id: `${targetShape.name}_${targetColor.hex}`,
+      text: `${targetColor.name} ${targetShape.name}`,
+      hex: targetColor.hex,
+      emoji: targetShape.emoji,
+      isShapeColor: true,
+    });
+
+    const otherColors = colorPool.filter(c => c.hex !== targetColor.hex);
+    const otherShapes = shapePool.filter(s => s.name !== targetShape.name);
+
+    let guard = 0;
+    while (finalChoices.length < choicesCount && guard < 30) {
+      guard++;
+      const randColor = Math.random() > 0.5 ? targetColor : otherColors[guard % otherColors.length];
+      const randShape = randColor.hex === targetColor.hex ? otherShapes[guard % otherShapes.length] : shapePool[guard % shapePool.length];
+      const id = `${randShape.name}_${randColor.hex}`;
+      if (!finalChoices.some(c => c.id === id)) {
+        finalChoices.push({
+          id,
+          text: `${randColor.name} ${randShape.name}`,
+          hex: randColor.hex,
+          emoji: randShape.emoji,
+          isShapeColor: true,
+        });
+      }
+    }
+
+    return {
+      mode,
+      promptText: `Find the ${targetColor.name} ${targetShape.name}!`,
+      targetHex: targetColor.hex,
+      targetEmoji: targetShape.emoji,
+      choices: shuffle(finalChoices),
+      pattern: [],
+    };
+  }
+
+  if (mode === 'pattern_color') {
+    // ABAB or ABCABC patterns
+    const isABC = level >= 8;
+    const base = colorPool.slice(0, isABC ? 3 : 2);
+    const reps = 2;
+    const patternList: Choice[] = [];
+    for (let r = 0; r < reps; r++) {
+      base.forEach(b => {
+        patternList.push({ id: b.hex, text: b.name, hex: b.hex, emoji: '■' });
+      });
+    }
+    const answer = base[patternList.length % base.length];
+    const distractors = colorPool.filter(c => c.hex !== answer.hex).slice(0, choicesCount - 1);
+    const finalChoices = shuffle([answer, ...distractors]).map(c => ({
+      id: c.hex,
+      text: c.name,
+      hex: c.hex,
+      emoji: '■',
+    }));
+
+    return {
+      mode,
+      promptText: 'What color comes next in the pattern?',
+      targetHex: answer.hex,
+      targetEmoji: '',
+      choices: finalChoices,
+      pattern: patternList,
+    };
+  }
+
+  // mode === 'pattern_shape'
+  // Shape pattern: e.g. 🔺, 🔵, 🔺, ?
+  const isABC = level >= 15;
+  const base = shapePool.slice(0, isABC ? 3 : 2);
+  const color = colorPool[0]; // keep color constant so they focus on shape
+  const reps = 2;
+  const patternList: Choice[] = [];
+  for (let r = 0; r < reps; r++) {
+    base.forEach(b => {
+      patternList.push({ id: b.name, text: b.name, hex: color.hex, emoji: b.emoji });
+    });
+  }
+  const answer = base[patternList.length % base.length];
+  const distractors = shapePool.filter(s => s.name !== answer.name).slice(0, choicesCount - 1);
+  const finalChoices = shuffle([answer, ...distractors]).map(s => ({
+    id: s.name,
+    text: s.name,
+    hex: color.hex,
+    emoji: s.emoji,
+  }));
+
   return {
     mode,
-    targetName: target.name,
-    answerHex: target.hex,
-    choices: shuffle([target, ...distractors]),
-    pattern: [],
+    promptText: 'What shape comes next in the pattern?',
+    targetHex: color.hex,
+    targetEmoji: answer.emoji,
+    choices: finalChoices,
+    pattern: patternList,
   };
 }
 
@@ -93,36 +223,39 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
   const [started, setStarted] = useState(false);
   const [question, setQuestion] = useState<Question>(() => makeQuestion(1));
   const [locked, setLocked] = useState(false);
-  const [pickedHex, setPickedHex] = useState<string | null>(null);
+  const [pickedId, setPickedId] = useState<string | null>(null);
   const [mascotExpr, setMascotExpr] = useState<MascotExpression>('thinking');
   const [mascotMsg, setMascotMsg] = useState('Find the color!');
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     if (!started) return;
-    const q = makeQuestion(session.level);
-    setQuestion(q);
+    setQuestion(makeQuestion(session.level));
     setLocked(false);
-    setPickedHex(null);
+    setPickedId(null);
     setMascotExpr('thinking');
-    setMascotMsg(
-      q.mode === 'match'
-        ? `Tap the ${q.targetName} one!`
-        : 'What color comes next in the pattern?',
-    );
-    // Regenerate only on a new round — never mid-question on a level shift.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setMascotMsg(question.promptText);
   }, [session.round, started]);
 
   const handlePick = useCallback(
-    (hex: string) => {
+    (choice: Choice) => {
       if (locked) return;
-      setPickedHex(hex);
-      const correct = hex === question.answerHex;
+      setPickedId(choice.id);
+
+      let correct = false;
+      if (question.mode === 'color' || question.mode === 'pattern_color') {
+        correct = choice.hex === question.targetHex;
+      } else if (question.mode === 'shape_color') {
+        correct = choice.hex === question.targetHex && choice.emoji === question.targetEmoji;
+      } else { // pattern_shape
+        correct = choice.emoji === question.targetEmoji;
+      }
+
       session.recordAnswer(correct, 1);
       if (correct) {
         setLocked(true);
         setMascotExpr('cheering');
-        setMascotMsg('Beautiful! That\'s the one! ⭐');
+        setMascotMsg("Beautiful! That's correct! ⭐");
         setTimeout(() => session.completeRound(), 1100);
       } else {
         setMascotExpr('neutral');
@@ -162,7 +295,7 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
         />
         <TutorialCard
           title="Colors & Shapes 🎨"
-          body="Tap the color you are asked for. At higher levels you'll finish color patterns too. Match a few in a row to unlock harder levels!"
+          body="Identify colors and complete shape patterns! Levels 1-5 build basic matching. Levels 6-15 test shape + color combinations and ABC patterns. Advanced levels 16-20 challenge you with complex double-attribute patterns!"
           themeColor={COLORS.colors}
           onStart={() => setStarted(true)}
         />
@@ -172,49 +305,95 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
 
   return (
     <View style={styles.container}>
-      <GameHeader title="Colors & Shapes" themeColor={COLORS.colors} stars={session.stars} onBack={onBack} />
+      <GameHeader
+        title="Colors & Shapes"
+        themeColor={COLORS.colors}
+        stars={session.stars}
+        onBack={onBack}
+        onPause={() => setPaused(true)}
+      />
       <Celebration trigger={session.correctPulse} />
+      <PauseMenu
+        visible={paused}
+        themeColor={COLORS.colors}
+        onResume={() => setPaused(false)}
+        onRestart={() => {
+          setPaused(false);
+          session.restart();
+        }}
+        onExit={onBack}
+      />
       <View style={styles.content}>
         <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
         <GameBody>
           <SessionBar session={session} themeColor={COLORS.colors} />
 
-          {question.mode === 'pattern' && (
-            <View style={styles.patternRow}>
-              {question.pattern.map((hex, i) => (
-                <View key={i} style={[styles.patternDot, { backgroundColor: hex }]} />
-              ))}
-              <View style={[styles.patternDot, styles.patternGap]}>
-                <Text style={styles.patternGapText}>?</Text>
+          <View style={styles.promptArea}>
+            {question.pattern.length > 0 ? (
+              <View style={styles.patternCard}>
+                {question.pattern.map((p, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.patternItem,
+                      { backgroundColor: p.hex, borderColor: COLORS.border },
+                    ]}
+                  >
+                    <Text style={styles.patternEmoji}>{p.emoji === '■' ? '' : p.emoji}</Text>
+                  </View>
+                ))}
+                <View style={[styles.patternItem, styles.patternTarget]}>
+                  <Text style={styles.targetText}>?</Text>
+                </View>
               </View>
-            </View>
-          )}
-
-          {question.mode === 'match' && (
-            <Text style={styles.targetPrompt}>{question.targetName}</Text>
-          )}
+            ) : (
+              <View style={styles.singlePromptCard}>
+                {question.targetEmoji ? (
+                  <Text style={styles.promptEmoji}>{question.targetEmoji}</Text>
+                ) : (
+                  <View style={[styles.colorBlock, { backgroundColor: question.targetHex }]} />
+                )}
+              </View>
+            )}
+          </View>
 
           <View style={styles.choices}>
-            {question.choices.map(swatch => {
-              const isPicked = pickedHex === swatch.hex;
-              const isAnswer = swatch.hex === question.answerHex;
+            {question.choices.map(choice => {
+              const isPicked = pickedId === choice.id;
+              
+              let isAnswer = false;
+              if (question.mode === 'color' || question.mode === 'pattern_color') {
+                isAnswer = choice.hex === question.targetHex;
+              } else if (question.mode === 'shape_color') {
+                isAnswer = choice.hex === question.targetHex && choice.emoji === question.targetEmoji;
+              } else {
+                isAnswer = choice.emoji === question.targetEmoji;
+              }
+
               const showCorrect = locked && isAnswer;
               const showWrong = isPicked && !isAnswer;
+
               return (
                 <TouchableOpacity
-                  key={swatch.hex}
+                  key={choice.id}
                   style={[
-                    styles.swatch,
-                    { backgroundColor: swatch.hex },
-                    showCorrect && styles.correctSwatch,
-                    showWrong && styles.wrongSwatch,
+                    styles.choiceCard,
+                    choice.isShapeColor ? styles.shapeColorCard : { backgroundColor: choice.hex },
+                    showCorrect && styles.correctCard,
+                    showWrong && styles.wrongCard,
                   ]}
-                  onPress={() => handlePick(swatch.hex)}
+                  onPress={() => handlePick(choice)}
                   accessibilityRole="button"
-                  accessibilityLabel={swatch.name}
+                  accessibilityLabel={choice.text}
                 >
-                  {showCorrect && <Text style={styles.swatchMark}>✓</Text>}
-                  {showWrong && <Text style={styles.swatchMark}>✕</Text>}
+                  {choice.isShapeColor ? (
+                    <View style={styles.shapeColorContainer}>
+                      <Text style={styles.choiceEmoji}>{choice.emoji}</Text>
+                      <Text style={[styles.choiceSubText, { color: choice.hex }]}>{choice.text.split(' ')[0]}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.choiceEmoji}>{choice.emoji === '■' ? '' : choice.emoji}</Text>
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -228,59 +407,78 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   content: { flex: 1, padding: 16, alignItems: 'center' },
-  targetPrompt: {
-    fontSize: 30,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    textAlign: 'center',
-    marginVertical: 24,
+  promptArea: {
+    minHeight: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 20,
   },
-  patternRow: {
+  patternCard: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  patternItem: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
-    marginVertical: 24,
-    flexWrap: 'wrap',
   },
-  patternDot: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  patternEmoji: { fontSize: 24 },
+  patternTarget: {
+    borderColor: COLORS.colors,
+    borderStyle: 'dashed',
+    backgroundColor: '#FFF',
+  },
+  targetText: { fontSize: 24, fontWeight: 'bold', color: COLORS.colors },
+  singlePromptCard: {
     justifyContent: 'center',
     alignItems: 'center',
-    ...SHADOWS.small,
   },
-  patternGap: {
-    backgroundColor: COLORS.cardBackground,
+  promptEmoji: { fontSize: 64 },
+  colorBlock: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
     borderWidth: 2,
     borderColor: COLORS.border,
-    borderStyle: 'dashed',
   },
-  patternGapText: { fontSize: 22, fontWeight: 'bold', color: COLORS.textMuted },
   choices: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 16,
+    gap: 14,
   },
-  swatch: {
-    width: 72,
-    height: 72,
+  choiceCard: {
+    width: 80,
+    height: 80,
     borderRadius: 20,
+    borderWidth: 2,
+    borderColor: COLORS.border,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: 'rgba(0,0,0,0.08)',
     ...SHADOWS.small,
   },
-  correctSwatch: { borderColor: COLORS.success, borderWidth: 4 },
-  wrongSwatch: { borderColor: COLORS.secondary, borderWidth: 4, opacity: 0.7 },
-  swatchMark: {
-    fontSize: 30,
-    fontWeight: 'bold',
-    color: '#FFF',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowRadius: 3,
+  shapeColorCard: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+  },
+  shapeColorContainer: {
+    alignItems: 'center',
+  },
+  choiceEmoji: { fontSize: 36 },
+  choiceSubText: { fontSize: 11, fontWeight: 'bold', marginTop: 2 },
+  correctCard: {
+    borderColor: COLORS.success,
+    borderWidth: 4,
+  },
+  wrongCard: {
+    borderColor: COLORS.secondary,
+    borderWidth: 4,
   },
 });

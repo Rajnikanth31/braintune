@@ -13,6 +13,7 @@ import {
   GameSuccess,
   GameBody,
   TutorialCard,
+  PauseMenu,
 } from '../shared/GameShell';
 
 interface MathGameProps {
@@ -22,7 +23,7 @@ interface MathGameProps {
 const randInt = (min: number, max: number) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => 0.5 - Math.random());
-const numChoices = (level: number) => Math.min(2 + level, 6);
+const numChoices = (level: number) => Math.min(2 + Math.floor(level / 3), 6);
 
 interface Question {
   text: string; // e.g. "3 + 4"
@@ -48,39 +49,97 @@ function buildChoices(answer: number, count: number): number[] {
 }
 
 /**
- * Difficulty ladder (Basic -> Master), so one game spans ~4 to ~15 year olds:
- *  1 add ≤5 · 2 add ≤10 · 3 subtract ≤10 · 4 add/sub ≤20
- *  5 ×(2,5,10) · 6 × up to 12 · 7 ÷ (exact) · 8 mixed two-step
+ * 20 difficulty levels ( Beginner 1-5, Easy-Medium 6-10, Medium-Hard 11-15, Advanced 16-20 ):
  */
 function makeQuestion(level: number): Question {
-  let a: number, b: number, op: string, answer: number;
+  let a: number, b: number, c: number, op: string, answer: number;
 
   switch (level) {
-    case 1:
-      op = '+'; a = randInt(1, 5); b = randInt(1, 5); answer = a + b; break;
-    case 2:
-      op = '+'; a = randInt(2, 10); b = randInt(1, 10); answer = a + b; break;
-    case 3:
-      op = '−'; a = randInt(3, 10); b = randInt(1, a); answer = a - b; break;
-    case 4:
+    case 1: // Add up to 5
+      op = '+'; a = randInt(1, 4); b = randInt(1, 4 - a + 1); answer = a + b; break;
+    case 2: // Add up to 10
+      op = '+'; a = randInt(1, 8); b = randInt(1, 10 - a); answer = a + b; break;
+    case 3: // Sub up to 10
+      op = '−'; a = randInt(2, 10); b = randInt(1, a - 1); answer = a - b; break;
+    case 4: // Mixed Add/Sub up to 10
+      if (Math.random() > 0.5) {
+        op = '+'; a = randInt(1, 8); b = randInt(1, 10 - a); answer = a + b;
+      } else {
+        op = '−'; a = randInt(2, 10); b = randInt(1, a - 1); answer = a - b;
+      }
+      break;
+    case 5: // Add up to 20
+      op = '+'; a = randInt(5, 15); b = randInt(1, 20 - a); answer = a + b; break;
+    case 6: // Sub up to 20
+      op = '−'; a = randInt(10, 20); b = randInt(1, a - 1); answer = a - b; break;
+    case 7: // Mixed Add/Sub up to 20
       if (Math.random() > 0.5) {
         op = '+'; a = randInt(5, 15); b = randInt(1, 20 - a); answer = a + b;
       } else {
-        op = '−'; a = randInt(8, 20); b = randInt(1, a); answer = a - b;
+        op = '−'; a = randInt(10, 20); b = randInt(1, a - 1); answer = a - b;
       }
       break;
-    case 5: {
-      op = '×'; a = [2, 5, 10][randInt(0, 2)]; b = randInt(1, 10); answer = a * b; break;
-    }
-    case 6:
+    case 8: // Mult by 2
+      op = '×'; a = 2; b = randInt(1, 10); answer = a * b; break;
+    case 9: // Mult by 5
+      op = '×'; a = 5; b = randInt(1, 10); answer = a * b; break;
+    case 10: // Mult by 10
+      op = '×'; a = 10; b = randInt(1, 10); answer = a * b; break;
+    case 11: // Mult up to 10
+      op = '×'; a = randInt(2, 9); b = randInt(2, 9); answer = a * b; break;
+    case 12: // Div by 2, 5, 10
+      op = '÷'; b = [2, 5, 10][randInt(0, 2)]; answer = randInt(1, 10); a = b * answer; break;
+    case 13: // Div up to 50
+      op = '÷'; b = randInt(2, 6); answer = randInt(2, 8); a = b * answer; break;
+    case 14: // 3-number Add/Sub up to 20
+      a = randInt(3, 10); b = randInt(2, 8); c = randInt(1, 5);
+      if (Math.random() > 0.5) {
+        answer = a + b - c;
+        return { text: `${a} + ${b} − ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
+      } else {
+        answer = a - b + c;
+        return { text: `${a} − ${b} + ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
+      }
+    case 15: // Mult and Add/Sub
+      a = randInt(2, 5); b = randInt(2, 5); c = randInt(1, 10);
+      if (Math.random() > 0.5) {
+        answer = a * b + c;
+        return { text: `${a} × ${b} + ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
+      } else {
+        answer = a * b - c;
+        if (answer < 0) answer = a * b + c; // keep positive
+        return { text: `${a} × ${b} − ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
+      }
+    case 16: // Mult up to 12
       op = '×'; a = randInt(2, 12); b = randInt(2, 12); answer = a * b; break;
-    case 7:
-      op = '÷'; b = randInt(2, 9); answer = randInt(2, 9); a = b * answer; break;
-    default: {
-      // Level 8 — mixed two-step, e.g. "3 × 4 + 5"
-      const x = randInt(2, 9), y = randInt(2, 6), z = randInt(1, 9);
-      answer = x * y + z;
-      return { text: `${x} × ${y} + ${z}`, answer, choices: buildChoices(answer, numChoices(level)) };
+    case 17: // Div up to 100
+      op = '÷'; b = randInt(2, 10); answer = randInt(2, 10); a = b * answer; break;
+    case 18: // Mixed priority, e.g. 18 - 3 * 4
+      a = randInt(10, 25); b = randInt(2, 5); c = randInt(2, 4);
+      answer = a - b * c;
+      if (answer < 0) answer = a + b * c;
+      return { text: `${a} − ${b} × ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
+    case 19: // Missing number in sequence, e.g. 5, 10, ?, 20
+      a = [2, 3, 5, 10][randInt(0, 3)]; // skip value
+      b = randInt(1, 5); // starting multiplier
+      c = randInt(1, 2); // gap index: index 1 or index 2
+      if (c === 1) {
+        answer = (b + 1) * a;
+        return { text: `${b * a},  ?,  ${(b + 2) * a},  ${(b + 3) * a}`, answer, choices: buildChoices(answer, numChoices(level)) };
+      } else {
+        answer = (b + 2) * a;
+        return { text: `${b * a},  ${(b + 1) * a},  ?,  ${(b + 3) * a}`, answer, choices: buildChoices(answer, numChoices(level)) };
+      }
+    default: { // Level 20: Parenthesis / 3-step equations
+      a = randInt(2, 10); b = randInt(2, 8); c = randInt(2, 4);
+      if (Math.random() > 0.5) {
+        answer = (a + b) * c;
+        return { text: `(${a} + ${b}) × ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
+      } else {
+        answer = a * b - c;
+        if (answer < 0) answer = a * b + c;
+        return { text: `(${a} × ${b}) − ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
+      }
     }
   }
   return { text: `${a} ${op} ${b}`, answer, choices: buildChoices(answer, numChoices(level)) };
@@ -97,6 +156,7 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
   const [picked, setPicked] = useState<number | null>(null);
   const [mascotExpr, setMascotExpr] = useState<MascotExpression>('thinking');
   const [mascotMsg, setMascotMsg] = useState('Solve the problem!');
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     if (!started) return;
@@ -105,8 +165,6 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
     setPicked(null);
     setMascotExpr('thinking');
     setMascotMsg('What is the answer?');
-    // Regenerate only on a new round — never mid-question on a level shift.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.round, started]);
 
   const handlePick = useCallback(
@@ -158,7 +216,7 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
         />
         <TutorialCard
           title="Math & Logic ➕"
-          body={`Solve the problem and tap the right answer. It grows with you: counting and adding at ${levelLabel(1)}, all the way to multiplication, division and two-step puzzles at ${levelLabel(MAX_LEVEL)}!`}
+          body={`Solve the math problems to earn stars and coins! Levels 1-5 build basic adding, while levels 6-15 test multiplication and division. Advanced levels 16-20 present skip counting and mixed operations!`}
           themeColor={COLORS.math}
           onStart={() => setStarted(true)}
         />
@@ -168,8 +226,24 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
 
   return (
     <View style={styles.container}>
-      <GameHeader title="Math & Logic" themeColor={COLORS.math} stars={session.stars} onBack={onBack} />
+      <GameHeader
+        title="Math & Logic"
+        themeColor={COLORS.math}
+        stars={session.stars}
+        onBack={onBack}
+        onPause={() => setPaused(true)}
+      />
       <Celebration trigger={session.correctPulse} />
+      <PauseMenu
+        visible={paused}
+        themeColor={COLORS.math}
+        onResume={() => setPaused(false)}
+        onRestart={() => {
+          setPaused(false);
+          session.restart();
+        }}
+        onExit={onBack}
+      />
       <View style={styles.content}>
         <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
         <GameBody>
@@ -220,7 +294,7 @@ const styles = StyleSheet.create({
     paddingVertical: 26,
     marginBottom: 24,
   },
-  problemText: { fontSize: 48, fontWeight: 'bold', color: COLORS.text },
+  problemText: { fontSize: 40, fontWeight: 'bold', color: COLORS.text, textAlign: 'center' },
   equals: { fontSize: 28, fontWeight: 'bold', color: COLORS.math, marginTop: 4 },
   choices: {
     flexDirection: 'row',
@@ -242,5 +316,5 @@ const styles = StyleSheet.create({
   },
   correctBtn: { backgroundColor: COLORS.correctGreen, borderColor: COLORS.success },
   wrongBtn: { backgroundColor: COLORS.incorrectRed, borderColor: COLORS.secondary },
-  answerText: { fontSize: 30, fontWeight: 'bold', color: COLORS.math },
+  answerText: { fontSize: 26, fontWeight: 'bold', color: COLORS.math },
 });

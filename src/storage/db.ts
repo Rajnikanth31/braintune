@@ -20,6 +20,7 @@ export interface ChildProfile {
   streak: number; // Consecutive-day play streak
   lastDayKey?: string; // Local day key (YYYY-MM-DD) of last play
   badges: string[]; // Earned badge ids
+  coins: number; // Coins currency
 }
 
 export interface GameStat {
@@ -64,6 +65,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 function normalizeProfile(p: Partial<ChildProfile> & { id: string }): ChildProfile {
   const stars = p.stars ?? 0;
   const xp = p.xp ?? xpForStars(stars); // derive XP for pre-XP saves
+  const coins = p.coins ?? (stars * 5); // backfill coins
   return {
     id: p.id,
     name: p.name ?? 'Friend',
@@ -76,6 +78,7 @@ function normalizeProfile(p: Partial<ChildProfile> & { id: string }): ChildProfi
     streak: p.streak ?? 0,
     lastDayKey: p.lastDayKey,
     badges: Array.isArray(p.badges) ? p.badges : [],
+    coins,
   };
 }
 
@@ -115,6 +118,7 @@ export const DB = {
       streak: 0,
       lastDayKey: undefined,
       badges: [],
+      coins: 0,
     };
     profiles.push(newProfile);
     await this.saveProfiles(profiles);
@@ -179,7 +183,8 @@ export const DB = {
     starsEarned: number,
     correctTaps: number,
     totalTaps: number,
-    difficultyLevel: number
+    difficultyLevel: number,
+    coinsEarned: number = 0
   ): Promise<{ newBadges: string[]; profile?: ChildProfile }> {
     try {
       // 1. Update stats for this game
@@ -209,12 +214,13 @@ export const DB = {
       };
       await this.saveChildStats(childId, stats);
 
-      // 2. Update profile: stars, XP, level, streak, sessions, badges.
+      // 2. Update profile: stars, XP, level, streak, sessions, badges, coins.
       const profiles = await this.getProfiles();
       const profileIndex = profiles.findIndex(p => p.id === childId);
       if (profileIndex > -1) {
         const profile = profiles[profileIndex];
         profile.stars += starsEarned;
+        profile.coins = (profile.coins ?? 0) + coinsEarned;
         profile.xp += xpForStars(starsEarned);
         profile.level = levelForXp(profile.xp);
         profile.completedSessions += 1;

@@ -27,6 +27,9 @@ export interface GameSession {
   newBadges: string[];
   /** Increments on every correct answer — drive a celebration burst off this. */
   correctPulse: number;
+  coins: number;
+  coinsEarned: number; // last coins added
+  currentCombo: number; // active streak combo multiplier (1x, 2x, 3x)
   /** Record one answer. Returns whether it was correct (for convenience). */
   recordAnswer: (isCorrect: boolean, starsAwarded?: number) => boolean;
   /** Advance to the next round, or finish + save the session on the last round. */
@@ -60,6 +63,8 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
   const [isComplete, setIsComplete] = useState(false);
   const [newBadges, setNewBadges] = useState<string[]>([]);
   const [correctPulse, setCorrectPulse] = useState(0);
+  const [coins, setCoins] = useState(0);
+  const [coinsEarned, setCoinsEarned] = useState(0);
 
   // Refs mirror the latest values so completeRound/finish use fresh numbers
   // without depending on stale closures.
@@ -67,6 +72,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
   const correctRef = useRef(0);
   const totalRef = useRef(0);
   const levelRef = useRef(startLevel);
+  const coinsRef = useRef(0);
   const savedRef = useRef(false);
 
   const recordAnswer = useCallback(
@@ -95,6 +101,20 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
         starsRef.current += starsAwarded;
         setStars(starsRef.current);
         setCorrectPulse(p => p + 1);
+
+        // Combo logic:
+        // streak = 0 -> 1x multiplier
+        // streak = 1 -> 2x multiplier (if it's the 2nd correct in a row)
+        // streak >= 2 -> 3x multiplier
+        const currentStreak = streak; // previous streak
+        const mult = currentStreak >= 2 ? 3 : currentStreak >= 1 ? 2 : 1;
+        const rewardCoins = 5 * mult;
+
+        coinsRef.current += rewardCoins;
+        setCoins(coinsRef.current);
+        setCoinsEarned(rewardCoins);
+      } else {
+        setCoinsEarned(0);
       }
 
       // Audio + tactile feedback (both respect their settings internally).
@@ -102,7 +122,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
       haptic(isCorrect ? 'success' : 'error', settings.soundEffectsEnabled);
       return isCorrect;
     },
-    [adaptive, maxLevel, settings.soundEffectsEnabled],
+    [adaptive, maxLevel, settings.soundEffectsEnabled, streak],
   );
 
   const finish = useCallback(async () => {
@@ -116,6 +136,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
       correctRef.current,
       totalRef.current,
       levelRef.current,
+      coinsRef.current,
     );
     setNewBadges(result.newBadges);
   }, [gameId, updateGameResult]);
@@ -135,6 +156,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     correctRef.current = 0;
     totalRef.current = 0;
     levelRef.current = startLevel;
+    coinsRef.current = 0;
     savedRef.current = false;
     setStars(0);
     setCorrect(0);
@@ -146,6 +168,8 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     setIsComplete(false);
     setNewBadges([]);
     setCorrectPulse(0);
+    setCoins(0);
+    setCoinsEarned(0);
   }, [startLevel]);
 
   const setLevelExternal = useCallback((n: number) => {
@@ -153,6 +177,8 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     levelRef.current = clamped;
     setLevel(clamped);
   }, [maxLevel]);
+
+  const currentCombo = streak >= 2 ? 3 : streak >= 1 ? 2 : 1;
 
   return {
     level,
@@ -168,6 +194,9 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     isComplete,
     newBadges,
     correctPulse,
+    coins,
+    coinsEarned,
+    currentCombo,
     recordAnswer,
     completeRound,
     restart,

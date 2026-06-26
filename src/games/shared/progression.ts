@@ -13,21 +13,34 @@
 import { ChildProfile, ChildStats } from '../../storage/db';
 
 /** Number of difficulty levels every game exposes (Basic .. Master). */
-export const MAX_LEVEL = 8;
+/** Number of difficulty levels every game exposes (Basic .. Legend). */
+export const MAX_LEVEL = 20;
 
 /** Rounds played in a single session before it completes. */
 export const ROUNDS_PER_SESSION = 5;
 
 /** Human-friendly label for a difficulty level (1-based). */
 export const LEVEL_LABELS = [
-  'Basic',
-  'Easy',
-  'Medium',
-  'Tricky',
-  'Hard',
-  'Super',
-  'Expert',
-  'Master',
+  'Basic',       // 1
+  'Starter',     // 2
+  'Easy',        // 3
+  'Simple',      // 4
+  'Novice',      // 5
+  'Junior',      // 6
+  'Growing',     // 7
+  'Medium',      // 8
+  'Tricky',      // 9
+  'Active',      // 10
+  'Skilled',     // 11
+  'Challenger',  // 12
+  'Hard',        // 13
+  'Smart',       // 14
+  'Expert',      // 15
+  'Super',       // 16
+  'Master',      // 17
+  'Champion',    // 18
+  'Hero',        // 19
+  'Legend',      // 20
 ] as const;
 
 export function levelLabel(level: number): string {
@@ -59,6 +72,16 @@ export const XP_LEVEL_THRESHOLDS: number[] = [
   1300, // level 8
   1700, // level 9
   2200, // level 10
+  2800, // level 11
+  3500, // level 12
+  4300, // level 13
+  5200, // level 14
+  6200, // level 15
+  7300, // level 16
+  8500, // level 17
+  9800, // level 18
+  11200, // level 19
+  12700, // level 20
 ];
 
 export function xpForStars(stars: number): number {
@@ -280,14 +303,35 @@ export const BADGES: BadgeDef[] = [
     name: 'Sharp Mind',
     emoji: '🧠',
     description: 'Reach the Hard level in any game.',
-    earned: ({ stats }) => reachedLevel(stats, 5),
+    earned: ({ stats }) => reachedLevel(stats, 13), // level 13 is Hard
   },
   {
     id: 'grand_master',
     name: 'Grand Master',
     emoji: '👑',
     description: 'Reach the Master level in any game.',
-    earned: ({ stats }) => reachedLevel(stats, MAX_LEVEL),
+    earned: ({ stats }) => reachedLevel(stats, 17), // level 17 is Master
+  },
+  {
+    id: 'legendary_brain',
+    name: 'Legendary Brain',
+    emoji: '🏆',
+    description: 'Reach the Legend level in any game.',
+    earned: ({ stats }) => reachedLevel(stats, MAX_LEVEL), // level 20 is Legend
+  },
+  {
+    id: 'coin_collector',
+    name: 'Coin Collector',
+    emoji: '🪙',
+    description: 'Earn 100 coins.',
+    earned: ({ profile }) => (profile.coins || 0) >= 100,
+  },
+  {
+    id: 'coin_tycoon',
+    name: 'Coin Tycoon',
+    emoji: '💰',
+    description: 'Earn 500 coins.',
+    earned: ({ profile }) => (profile.coins || 0) >= 500,
   },
   {
     id: 'on_fire',

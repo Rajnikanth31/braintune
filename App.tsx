@@ -200,7 +200,7 @@ function AppContent() {
                 <Text style={styles.profileAvatar}>{p.avatar}</Text>
                 <View style={styles.profileInfo}>
                   <Text style={styles.profileName}>{p.name}</Text>
-                  <Text style={styles.profileStars}>⭐ {p.stars} stars earned</Text>
+                  <Text style={styles.profileStars}>⭐ {p.stars} stars  •  🪙 {p.coins || 0} coins</Text>
                 </View>
                 <Text style={styles.chevron}>▶</Text>
               </TouchableOpacity>
@@ -240,7 +240,7 @@ function AppContent() {
 
             <View style={styles.headerRight}>
               <View style={styles.headerStars}>
-                <Text style={styles.headerStarsText}>⭐ {activeProfile.stars}</Text>
+                <Text style={styles.headerStarsText}>⭐ {activeProfile.stars}  •  🪙 {activeProfile.coins || 0}</Text>
               </View>
               <TouchableOpacity
                 style={styles.settingsIconBtn}
@@ -593,7 +593,7 @@ const ChildReportCard: React.FC<{ profile: any }> = ({ profile }) => {
           </Text>
         </View>
         <View style={styles.reportBadge}>
-          <Text style={styles.reportBadgeText}>⭐ {profile.stars}</Text>
+          <Text style={styles.reportBadgeText}>⭐ {profile.stars}  •  🪙 {profile.coins || 0}</Text>
         </View>
       </View>
 

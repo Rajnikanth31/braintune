@@ -13,13 +13,13 @@ import {
   GameSuccess,
   GameBody,
   TutorialCard,
+  PauseMenu,
 } from '../shared/GameShell';
 
 interface LettersGameProps {
   onBack: () => void;
 }
 
-// Phonics: each letter with a friendly example word + emoji.
 const PHONICS: { letter: string; word: string; emoji: string }[] = [
   { letter: 'A', word: 'Apple', emoji: '🍎' },
   { letter: 'B', word: 'Ball', emoji: '⚽' },
@@ -42,27 +42,64 @@ const PHONICS: { letter: string; word: string; emoji: string }[] = [
 ];
 
 const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => 0.5 - Math.random());
-const optionsForLevel = (level: number): number =>
-  Math.min(2 + level, 8); // L1=3 ... caps at 8 buttons
+const optionsForLevel = (level: number) => Math.min(2 + Math.floor(level / 3), 8);
+
+type QuestionMode = 'start_upper' | 'start_lower' | 'fill_start' | 'fill_middle';
 
 interface Question {
   prompt: { word: string; emoji: string };
   answer: string;
   choices: string[];
+  mode: QuestionMode;
+  wordTemplate: string;
 }
 
 function makeQuestion(level: number): Question {
   const pool = shuffle(PHONICS);
   const target = pool[0];
-  const numChoices = optionsForLevel(level);
-  const distractors = pool
-    .filter(p => p.letter !== target.letter)
-    .slice(0, numChoices - 1)
-    .map(p => p.letter);
+  const choicesCount = optionsForLevel(level);
+
+  let mode: QuestionMode = 'start_upper';
+  if (level > 5 && level <= 10) mode = 'start_lower';
+  else if (level > 10 && level <= 15) mode = 'fill_start';
+  else if (level > 15) mode = 'fill_middle';
+
+  let answer = '';
+  let wordTemplate = '';
+  let distractorsPool: string[] = [];
+
+  if (mode === 'start_upper') {
+    answer = target.letter;
+    wordTemplate = target.word;
+    distractorsPool = PHONICS.filter(p => p.letter !== target.letter).map(p => p.letter);
+  } else if (mode === 'start_lower') {
+    answer = target.letter.toLowerCase();
+    wordTemplate = target.word.toLowerCase();
+    distractorsPool = PHONICS.filter(p => p.letter !== target.letter).map(p => p.letter.toLowerCase());
+  } else if (mode === 'fill_start') {
+    answer = target.letter;
+    wordTemplate = '_ ' + target.word.substring(1).toUpperCase();
+    distractorsPool = PHONICS.filter(p => p.letter !== target.letter).map(p => p.letter);
+  } else {
+    // missing middle letter: e.g. "Cat" -> "C _ t" or "Ball" -> "B _ l l"
+    const word = target.word.toUpperCase();
+    const midIdx = Math.floor(word.length / 2);
+    answer = word[midIdx];
+    wordTemplate = word.substring(0, midIdx) + ' _ ' + word.substring(midIdx + 1);
+    
+    // Choose distractors from letters in the word alphabet, or letters in PHONICS
+    distractorsPool = PHONICS.map(p => p.letter).filter(l => l !== answer);
+  }
+
+  const distractors = shuffle(distractorsPool).slice(0, choicesCount - 1);
+  const finalChoices = shuffle([answer, ...distractors]);
+
   return {
     prompt: { word: target.word, emoji: target.emoji },
-    answer: target.letter,
-    choices: shuffle([target.letter, ...distractors]),
+    answer,
+    choices: finalChoices,
+    mode,
+    wordTemplate,
   };
 }
 
@@ -77,17 +114,15 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
   const [picked, setPicked] = useState<string | null>(null);
   const [mascotExpr, setMascotExpr] = useState<MascotExpression>('thinking');
   const [mascotMsg, setMascotMsg] = useState('Which letter makes this sound?');
+  const [paused, setPaused] = useState(false);
 
-  // New question only on a fresh round (not when adaptive difficulty shifts
-  // mid-question), so the current question is never swapped before answering.
   useEffect(() => {
     if (!started) return;
     setQuestion(makeQuestion(session.level));
     setLocked(false);
     setPicked(null);
     setMascotExpr('thinking');
-    setMascotMsg('Look at the picture. Which letter does it start with?');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setMascotMsg('Look at the picture. Which letter fits?');
   }, [session.round, started]);
 
   const handlePick = useCallback(
@@ -99,7 +134,7 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
       if (correct) {
         setLocked(true);
         setMascotExpr('cheering');
-        setMascotMsg(`Yes! ${question.prompt.word} starts with ${question.answer}! ⭐`);
+        setMascotMsg(`Yes! The correct spelling is ${question.prompt.word}! ⭐`);
         setTimeout(() => session.completeRound(), 1100);
       } else {
         setMascotExpr('neutral');
@@ -149,7 +184,7 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
         />
         <TutorialCard
           title="Letters & Phonics 🅰"
-          body="A picture will appear. Tap the letter its name starts with — then the word is revealed! Get a few right in a row to level up."
+          body="Complete spelling and phonics puzzles! Levels 1-10 match starting letters (uppercase and lowercase). Levels 11-20 test advanced spelling, fill-in-the-blanks, and phonics blend recognition!"
           themeColor={COLORS.letters}
           onStart={() => setStarted(true)}
         />
@@ -164,8 +199,19 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
         themeColor={COLORS.letters}
         stars={session.stars}
         onBack={onBack}
+        onPause={() => setPaused(true)}
       />
       <Celebration trigger={session.correctPulse} />
+      <PauseMenu
+        visible={paused}
+        themeColor={COLORS.letters}
+        onResume={() => setPaused(false)}
+        onRestart={() => {
+          setPaused(false);
+          session.restart();
+        }}
+        onExit={onBack}
+      />
       <View style={styles.content}>
         <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
         <GameBody>
@@ -173,10 +219,10 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
 
           <View style={styles.promptCard}>
             <Text style={styles.promptEmoji}>{question.prompt.emoji}</Text>
-            {picked ? (
-              <Text style={styles.promptWord}>{question.prompt.word}</Text>
+            {locked || picked ? (
+              <Text style={styles.promptWord}>{question.prompt.word.toUpperCase()}</Text>
             ) : (
-              <Text style={styles.promptHint}>Tap the first letter…</Text>
+              <Text style={styles.promptWordTemplate}>{question.wordTemplate}</Text>
             )}
           </View>
 
@@ -221,26 +267,28 @@ const styles = StyleSheet.create({
   },
   promptEmoji: { fontSize: 72 },
   promptWord: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
     color: COLORS.text,
     marginTop: 8,
+    letterSpacing: 2,
   },
-  promptHint: {
-    fontSize: 14,
-    fontStyle: 'italic',
-    color: COLORS.textMuted,
+  promptWordTemplate: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: COLORS.letters,
     marginTop: 8,
+    letterSpacing: 4,
   },
   choices: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 14,
+    gap: 12,
   },
   letterBtn: {
-    width: 64,
-    height: 64,
+    width: 60,
+    height: 60,
     borderRadius: 18,
     borderWidth: 2,
     borderColor: COLORS.letters,
@@ -251,5 +299,5 @@ const styles = StyleSheet.create({
   },
   correctBtn: { backgroundColor: COLORS.correctGreen, borderColor: COLORS.success },
   wrongBtn: { backgroundColor: COLORS.incorrectRed, borderColor: COLORS.secondary },
-  letterText: { fontSize: 32, fontWeight: 'bold', color: COLORS.letters },
+  letterText: { fontSize: 28, fontWeight: 'bold', color: COLORS.letters },
 });

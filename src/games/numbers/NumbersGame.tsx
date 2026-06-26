@@ -13,20 +13,26 @@ import {
   GameSuccess,
   GameBody,
   TutorialCard,
+  PauseMenu,
 } from '../shared/GameShell';
 
 interface NumbersGameProps {
   onBack: () => void;
 }
 
-const COUNT_EMOJIS = ['🍎', '⭐', '🐠', '🌸', '🎈', '🐝', '🍓', '🚗'];
+const COUNT_EMOJIS = ['🍎', '⭐', '🐠', '🌸', '🎈', '🐝', '🍓', '🚗', '🐸', '🐨', '🦖', '🍭'];
 const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => 0.5 - Math.random());
 const randInt = (min: number, max: number) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
-// Counting range grows with difficulty: L1 -> up to 3, L5 -> up to 10.
-const maxCountForLevel = (level: number) => Math.min(2 + level, 10);
-const numChoices = (level: number) => Math.min(2 + level, 5);
+// Scaling rules
+const maxCountForLevel = (level: number) => {
+  if (level <= 5) return 1 + level * 2; // L1=3..L5=11
+  if (level <= 10) return 10 + (level - 5) * 2; // L6-10=12..20
+  return 20 + (level - 10) * 4; // L11-20=24..60
+};
+
+const numChoices = (level: number) => Math.min(3 + Math.floor(level / 5), 6);
 
 type Mode = 'count' | 'sequence';
 
@@ -44,10 +50,9 @@ function buildChoices(answer: number, count: number, max: number): number[] {
   let guard = 0;
   while (set.size < count && guard < 50) {
     guard += 1;
-    const candidate = randInt(Math.max(1, answer - 3), answer + 3);
-    if (candidate >= 1 && candidate <= max + 2) set.add(candidate);
+    const candidate = randInt(Math.max(1, answer - 5), answer + 5);
+    if (candidate >= 1 && candidate <= max + 5) set.add(candidate);
   }
-  // top up if range was too tight
   let n = 1;
   while (set.size < count) {
     if (!set.has(n)) set.add(n);
@@ -58,32 +63,69 @@ function buildChoices(answer: number, count: number, max: number): number[] {
 
 function makeQuestion(level: number): Question {
   const max = maxCountForLevel(level);
-  const choices = numChoices(level);
-  // Sequence questions only appear from level 2 onward.
-  const mode: Mode = level >= 2 && Math.random() > 0.5 ? 'sequence' : 'count';
+  const choicesCount = numChoices(level);
+
+  // Sequences only from level 3 onwards.
+  const mode: Mode = level >= 3 && Math.random() > 0.5 ? 'sequence' : 'count';
 
   if (mode === 'sequence') {
-    const start = randInt(1, Math.max(1, max - 3));
-    const seq = [start, start + 1, start + 2];
-    const answer = start + 3; // "what comes next?"
+    let start = 1;
+    let step = 1;
+    let seq: number[] = [];
+    let answer = 0;
+
+    if (level <= 5) {
+      // simple counting: e.g. 2, 3, 4 -> 5
+      start = randInt(1, 10);
+      step = 1;
+      seq = [start, start + 1, start + 2];
+      answer = start + 3;
+    } else if (level <= 10) {
+      // simple skip by 2s or 5s: e.g. 2, 4, 6 -> 8 or 5, 10, 15 -> 20
+      step = Math.random() > 0.5 ? 2 : 5;
+      start = randInt(1, 5) * step;
+      seq = [start, start + step, start + step * 2];
+      answer = start + step * 3;
+    } else if (level <= 15) {
+      // descending sequences: e.g. 10, 8, 6 -> 4 or 20, 15, 10 -> 5
+      step = Math.random() > 0.5 ? -2 : -5;
+      start = step === -2 ? randInt(8, 15) * 2 : randInt(4, 7) * 5;
+      seq = [start, start + step, start + step * 2];
+      answer = start + step * 3;
+    } else {
+      // advanced skip counting: by 3s, 4s, 10s up to 100
+      step = [3, 4, 10][randInt(0, 2)];
+      start = randInt(1, 5) * Math.abs(step);
+      if (Math.random() > 0.5) {
+        seq = [start, start + step, start + step * 2];
+        answer = start + step * 3;
+      } else {
+        // descending from 100 or 50
+        start = step === 10 ? 100 : step * 10;
+        seq = [start, start - step, start - step * 2];
+        answer = start - step * 3;
+      }
+    }
+
     return {
       mode,
       emoji: '',
       count: 0,
       sequence: seq,
       answer,
-      choices: buildChoices(answer, choices, max + 2),
+      choices: buildChoices(answer, choicesCount, Math.max(answer, 10)),
     };
   }
 
-  const count = randInt(1, max);
+  // Count mode
+  const count = randInt(1, Math.min(max, 24)); // cap count at 24 emojis for screen layout
   return {
     mode,
     emoji: shuffle(COUNT_EMOJIS)[0],
     count,
     sequence: [],
     answer: count,
-    choices: buildChoices(count, choices, max),
+    choices: buildChoices(count, choicesCount, count),
   };
 }
 
@@ -98,19 +140,17 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
   const [picked, setPicked] = useState<number | null>(null);
   const [mascotExpr, setMascotExpr] = useState<MascotExpression>('thinking');
   const [mascotMsg, setMascotMsg] = useState('Count carefully!');
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     if (!started) return;
-    const q = makeQuestion(session.level);
-    setQuestion(q);
+    setQuestion(makeQuestion(session.level));
     setLocked(false);
     setPicked(null);
     setMascotExpr('thinking');
     setMascotMsg(
-      q.mode === 'count' ? 'How many do you see?' : 'What number comes next?',
+      question.mode === 'count' ? 'How many do you see?' : 'What number comes next?',
     );
-    // Regenerate only on a new round — never mid-question on a level shift.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.round, started]);
 
   const handlePick = useCallback(
@@ -162,7 +202,7 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
         />
         <TutorialCard
           title="Numbers & Counting 🔢"
-          body="Count the objects and tap the right number. Higher levels add 'what comes next?' sequences. Keep a streak to climb the levels!"
+          body="Count the beautiful items or solve number sequences! Levels 1-5 build basic counting. Levels 6-15 test skip counting (2s, 5s) and reverse ordering. Advanced levels 16-20 challenge you with sequences up to 100!"
           themeColor={COLORS.numbers}
           onStart={() => setStarted(true)}
         />
@@ -170,55 +210,78 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
     );
   }
 
+  // Generate grid of count emojis
+  const renderCountItems = () => {
+    return (
+      <View style={styles.emojiGrid}>
+        {Array.from({ length: question.count }).map((_, i) => (
+          <Text key={i} style={styles.emojiItem}>
+            {question.emoji}
+          </Text>
+        ))}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <GameHeader title="Numbers & Counting" themeColor={COLORS.numbers} stars={session.stars} onBack={onBack} />
+      <GameHeader
+        title="Numbers & Counting"
+        themeColor={COLORS.numbers}
+        stars={session.stars}
+        onBack={onBack}
+        onPause={() => setPaused(true)}
+      />
       <Celebration trigger={session.correctPulse} />
+      <PauseMenu
+        visible={paused}
+        themeColor={COLORS.numbers}
+        onResume={() => setPaused(false)}
+        onRestart={() => {
+          setPaused(false);
+          session.restart();
+        }}
+        onExit={onBack}
+      />
       <View style={styles.content}>
         <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
         <GameBody>
           <SessionBar session={session} themeColor={COLORS.numbers} />
 
-          {question.mode === 'count' ? (
-            <View style={styles.objectsArea}>
-              {Array.from({ length: question.count }).map((_, i) => (
-                <Text key={i} style={styles.objectEmoji}>
-                  {question.emoji}
-                </Text>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.sequenceArea}>
-              {question.sequence.map(n => (
-                <View key={n} style={styles.seqTile}>
-                  <Text style={styles.seqText}>{n}</Text>
-                </View>
-              ))}
-              <View style={[styles.seqTile, styles.seqGap]}>
-                <Text style={styles.seqGapText}>?</Text>
+          <View style={styles.boardArea}>
+            {question.mode === 'count' ? (
+              renderCountItems()
+            ) : (
+              <View style={styles.sequenceCard}>
+                {question.sequence.map((n, i) => (
+                  <Text key={i} style={styles.seqItem}>
+                    {n}
+                  </Text>
+                ))}
+                <Text style={[styles.seqItem, styles.seqTarget]}>?</Text>
               </View>
-            </View>
-          )}
+            )}
+          </View>
 
           <View style={styles.choices}>
-            {question.choices.map(n => {
-              const isPicked = picked === n;
-              const isAnswer = n === question.answer;
+            {question.choices.map(choice => {
+              const isPicked = picked === choice;
+              const isAnswer = choice === question.answer;
               const showCorrect = locked && isAnswer;
               const showWrong = isPicked && !isAnswer;
               return (
                 <TouchableOpacity
-                  key={n}
+                  key={choice}
                   style={[
-                    styles.numberBtn,
+                    styles.choiceBtn,
                     showCorrect && styles.correctBtn,
                     showWrong && styles.wrongBtn,
                   ]}
-                  onPress={() => handlePick(n)}
+                  onPress={() => handlePick(choice)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Number ${n}`}
+                  accessibilityLabel={`Choice ${choice}`}
                 >
-                  <Text style={styles.numberText}>{n}</Text>
+                  <Text style={styles.choiceText}>{choice}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -232,49 +295,48 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   content: { flex: 1, padding: 16, alignItems: 'center' },
-  objectsArea: {
+  boardArea: {
+    minHeight: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 20,
+  },
+  emojiGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: 120,
-    backgroundColor: COLORS.background,
-    borderRadius: 20,
-    padding: 12,
-    marginBottom: 20,
-    gap: 6,
+    gap: 12,
   },
-  objectEmoji: { fontSize: 40, margin: 2 },
-  sequenceArea: {
+  emojiItem: { fontSize: 36 },
+  sequenceCard: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 24,
-    minHeight: 100,
+    gap: 14,
   },
-  seqTile: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: COLORS.background,
-    borderWidth: 2,
-    borderColor: COLORS.numbers,
-    justifyContent: 'center',
-    alignItems: 'center',
+  seqItem: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: COLORS.text,
   },
-  seqText: { fontSize: 26, fontWeight: 'bold', color: COLORS.numbers },
-  seqGap: { borderStyle: 'dashed', backgroundColor: COLORS.cardBackground },
-  seqGapText: { fontSize: 26, fontWeight: 'bold', color: COLORS.textMuted },
+  seqTarget: {
+    color: COLORS.numbers,
+    fontSize: 32,
+    borderBottomWidth: 3,
+    borderBottomColor: COLORS.numbers,
+    paddingHorizontal: 6,
+  },
   choices: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 14,
+    gap: 12,
   },
-  numberBtn: {
-    width: 64,
-    height: 64,
+  choiceBtn: {
+    width: 60,
+    height: 60,
     borderRadius: 18,
     borderWidth: 2,
     borderColor: COLORS.numbers,
@@ -285,5 +347,5 @@ const styles = StyleSheet.create({
   },
   correctBtn: { backgroundColor: COLORS.correctGreen, borderColor: COLORS.success },
   wrongBtn: { backgroundColor: COLORS.incorrectRed, borderColor: COLORS.secondary },
-  numberText: { fontSize: 30, fontWeight: 'bold', color: COLORS.numbers },
+  choiceText: { fontSize: 26, fontWeight: 'bold', color: COLORS.numbers },
 });

@@ -14,7 +14,8 @@ interface AppContextType {
     starsEarned: number,
     correctTaps: number,
     totalTaps: number,
-    difficultyLevel: number
+    difficultyLevel: number,
+    coinsEarned?: number
   ) => Promise<{ newBadges: string[] }>;
   updateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
   refreshProfiles: () => Promise<void>;
@@ -113,7 +114,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     starsEarned: number,
     correctTaps: number,
     totalTaps: number,
-    difficultyLevel: number
+    difficultyLevel: number,
+    coinsEarned: number = 0
   ) => {
     if (!activeProfile) return { newBadges: [] };
 
@@ -123,7 +125,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       starsEarned,
       correctTaps,
       totalTaps,
-      difficultyLevel
+      difficultyLevel,
+      coinsEarned
     );
 
     // Refresh local state
