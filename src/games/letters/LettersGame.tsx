@@ -4,7 +4,7 @@ import { COLORS, SHADOWS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { useApp } from '../../state/AppContext';
 import { Celebration } from '../../components/Celebration';
-import { useGameSession } from '../shared/useGameSession';
+import { useGameSession, useUnlockDifficulty } from '../shared/useGameSession';
 import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
 import {
   GameHeader,
@@ -108,6 +108,7 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
   const unlocked = highestUnlockedLevel(activeStats?.letters);
 
   const session = useGameSession({ gameId: 'letters', startLevel: 1 });
+  const handleUnlockDifficulty = useUnlockDifficulty('letters');
   const [started, setStarted] = useState(false);
   const [question, setQuestion] = useState<Question>(() => makeQuestion(1));
   const [locked, setLocked] = useState(false);
@@ -186,6 +187,7 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
           selected={session.level}
           themeColor={COLORS.letters}
           onSelect={session.setLevel}
+          onUnlockDifficulty={handleUnlockDifficulty}
         />
         <TutorialCard
           title="Letters & Phonics 🅰"

@@ -180,7 +180,7 @@ export function highestUnlockedLevel(gameStat?: {
     return 1;
   }
   if (gameStat.sessionsPlayed === 0) {
-    return 1;
+    return Math.max(gameStat.highestDifficultyReached, 1);
   }
   // Backward compatibility: legacy profiles that saved before this change
   // might have unlocked highestDifficultyReached + 1 if their cumulative successRate >= 60%

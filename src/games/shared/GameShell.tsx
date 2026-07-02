@@ -98,6 +98,7 @@ interface LevelPickerProps {
   selected: number;
   themeColor: string;
   onSelect: (level: number) => void;
+  onUnlockDifficulty?: (startLevel: number, difficultyName: string) => void;
 }
 
 export const LevelPicker: React.FC<LevelPickerProps> = ({
@@ -105,6 +106,7 @@ export const LevelPicker: React.FC<LevelPickerProps> = ({
   selected,
   themeColor,
   onSelect,
+  onUnlockDifficulty,
 }) => {
   const difficulties = [
     { name: 'Basic', range: 'Lvl 1–5', startLevel: 1, icon: '🟢' },
@@ -123,8 +125,13 @@ export const LevelPicker: React.FC<LevelPickerProps> = ({
           return (
             <TouchableOpacity
               key={diff.name}
-              disabled={!isUnlocked}
-              onPress={withClick(() => onSelect(diff.startLevel))}
+              onPress={withClick(() => {
+                if (isUnlocked) {
+                  onSelect(diff.startLevel);
+                } else if (onUnlockDifficulty) {
+                  onUnlockDifficulty(diff.startLevel, diff.name);
+                }
+              })}
               accessibilityRole="button"
               accessibilityState={{ disabled: !isUnlocked, selected: isActive }}
               accessibilityLabel={`${diff.name} difficulty, ${diff.range}${isUnlocked ? '' : ', locked'}`}

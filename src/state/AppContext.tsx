@@ -9,6 +9,9 @@ interface AppContextType {
   isLoading: boolean;
   createProfile: (name: string, avatar: string) => Promise<void>;
   selectProfile: (id: string | null) => Promise<void>;
+  renameProfile: (id: string, name: string, avatar?: string) => Promise<void>;
+  deleteProfile: (id: string) => Promise<void>;
+  unlockLevelWithCoins: (gameId: string, targetLevel: number, coinCost: number) => Promise<boolean>;
   updateGameResult: (
     gameId: string,
     starsEarned: number,
@@ -142,6 +145,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await DB.saveSettings(updated);
   };
 
+  const renameProfile = async (id: string, name: string, avatar?: string) => {
+    await DB.renameProfile(id, name, avatar);
+    await refreshProfiles();
+  };
+
+  const deleteProfile = async (id: string) => {
+    await DB.deleteProfile(id);
+    if (activeProfile?.id === id) {
+      await selectProfile(null);
+    } else {
+      await refreshProfiles();
+    }
+  };
+
+  const unlockLevelWithCoins = async (gameId: string, targetLevel: number, coinCost: number): Promise<boolean> => {
+    if (!activeProfile) return false;
+    const result = await DB.unlockLevelWithCoins(activeProfile.id, gameId, targetLevel, coinCost);
+    if (result) {
+      await refreshProfiles();
+      const updatedStats = await DB.getChildStats(activeProfile.id);
+      setActiveStats(updatedStats);
+      return true;
+    }
+    return false;
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -152,6 +181,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isLoading,
         createProfile,
         selectProfile,
+        renameProfile,
+        deleteProfile,
+        unlockLevelWithCoins,
         updateGameResult,
         updateSettings,
         refreshProfiles,

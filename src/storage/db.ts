@@ -272,6 +272,73 @@ export const DB = {
     }
   },
 
+  async renameProfile(id: string, newName: string, newAvatar?: string): Promise<ChildProfile | null> {
+    try {
+      const profiles = await this.getProfiles();
+      const idx = profiles.findIndex(p => p.id === id);
+      if (idx > -1) {
+        profiles[idx].name = newName;
+        if (newAvatar) {
+          profiles[idx].avatar = newAvatar;
+        }
+        await this.saveProfiles(profiles);
+        return profiles[idx];
+      }
+      return null;
+    } catch (e) {
+      console.error(`Failed to rename profile ${id}`, e);
+      return null;
+    }
+  },
+
+  async deleteProfile(id: string): Promise<void> {
+    try {
+      const profiles = await this.getProfiles();
+      const filtered = profiles.filter(p => p.id !== id);
+      await this.saveProfiles(filtered);
+      await AsyncStorage.removeItem(`${KEYS.STATS_PREFIX}${id}`);
+    } catch (e) {
+      console.error(`Failed to delete profile ${id}`, e);
+    }
+  },
+
+  async unlockLevelWithCoins(
+    childId: string,
+    gameId: string,
+    targetLevel: number,
+    coinCost: number
+  ): Promise<ChildProfile | null> {
+    try {
+      const profiles = await this.getProfiles();
+      const idx = profiles.findIndex(p => p.id === childId);
+      if (idx < 0) return null;
+      const profile = profiles[idx];
+      if (profile.coins < coinCost) {
+        return null;
+      }
+      profile.coins -= coinCost;
+      profiles[idx] = profile;
+      await this.saveProfiles(profiles);
+
+      const stats = await this.getChildStats(childId);
+      const gameStat = stats[gameId] || {
+        gameId,
+        starsEarned: 0,
+        sessionsPlayed: 0,
+        successRate: 100,
+        highestDifficultyReached: 1,
+      };
+      gameStat.highestDifficultyReached = Math.max(gameStat.highestDifficultyReached, targetLevel);
+      stats[gameId] = gameStat;
+      await this.saveChildStats(childId, stats);
+
+      return profile;
+    } catch (e) {
+      console.error(`Failed to unlock level with coins for child ${childId}`, e);
+      return null;
+    }
+  },
+
   // Settings
   async getSettings(): Promise<AppSettings> {
     try {

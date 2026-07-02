@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { Alert } from 'react-native';
 import { useApp } from '../../state/AppContext';
 import { MAX_LEVEL, ROUNDS_PER_SESSION, nextDifficulty } from './progression';
 import { haptic } from '../../audio/haptics';
@@ -204,4 +205,45 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     completeRound,
     restart,
   };
+}
+
+export function useUnlockDifficulty(gameId: string) {
+  const { activeProfile, unlockLevelWithCoins } = useApp();
+
+  const handleUnlockDifficulty = useCallback(
+    (startLevel: number, difficultyName: string) => {
+      const cost = 50;
+      if (!activeProfile) return;
+
+      if ((activeProfile.coins ?? 0) < cost) {
+        Alert.alert(
+          'Not Enough Coins! 🪙',
+          `You need ${cost} coins to unlock ${difficultyName} mode. Play games to earn more coins!`,
+          [{ text: 'OK', style: 'cancel' }]
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Unlock Mode? 🪙',
+        `Would you like to unlock ${difficultyName} mode for ${cost} coins?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Unlock! 🔓',
+            onPress: async () => {
+              const success = await unlockLevelWithCoins(gameId, startLevel, cost);
+              if (success) {
+                SoundService.playSfx('win');
+                Alert.alert('Success! 🎉', `${difficultyName} mode is now unlocked!`);
+              }
+            },
+          },
+        ]
+      );
+    },
+    [activeProfile, unlockLevelWithCoins, gameId]
+  );
+
+  return handleUnlockDifficulty;
 }

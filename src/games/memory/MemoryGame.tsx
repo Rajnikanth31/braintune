@@ -13,7 +13,7 @@ import { COLORS, SHADOWS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { useApp } from '../../state/AppContext';
 import { Celebration } from '../../components/Celebration';
-import { useGameSession } from '../shared/useGameSession';
+import { useGameSession, useUnlockDifficulty } from '../shared/useGameSession';
 import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
 import {
   GameHeader,
@@ -68,6 +68,7 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
   const unlocked = highestUnlockedLevel(activeStats?.memory);
 
   const session = useGameSession({ gameId: 'memory', startLevel: 1, adaptive: false });
+  const handleUnlockDifficulty = useUnlockDifficulty('memory');
   const [started, setStarted] = useState(false);
   const [gameSubMode, setGameSubMode] = useState<'match' | 'attention'>('match');
 
@@ -340,6 +341,7 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
           selected={session.level}
           themeColor={COLORS.memory}
           onSelect={session.setLevel}
+          onUnlockDifficulty={handleUnlockDifficulty}
         />
         <TutorialCard
           title="Memory & Attention 🃏"

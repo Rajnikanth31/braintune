@@ -9,6 +9,7 @@ import {
   TextInput,
   Modal,
   FlatList,
+  Alert,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SHADOWS } from './src/theme/colors';
@@ -62,6 +63,8 @@ function AppContent() {
     createProfile,
     selectProfile,
     updateSettings,
+    renameProfile,
+    deleteProfile,
   } = useApp();
 
   const [currentScreen, setCurrentScreen] = useState<
@@ -72,9 +75,16 @@ function AppContent() {
   const [showAddProfileModal, setShowAddProfileModal] = useState(false);
   const [showParentGate, setShowParentGate] = useState(false);
   
+  // Edit Profile controls
+  const [isEditing, setIsEditing] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<ChildProfile | null>(null);
+
   // Form fields
   const [newName, setNewName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
+  const [editName, setEditName] = useState('');
+  const [editAvatar, setEditAvatar] = useState(AVATARS[0]);
   const [formError, setFormError] = useState('');
 
   const handleCreateProfile = async () => {
@@ -86,6 +96,44 @@ function AppContent() {
     setNewName('');
     setFormError('');
     setShowAddProfileModal(false);
+  };
+
+  const handleEditProfileSave = async () => {
+    if (!editingProfile) return;
+    if (!editName.trim()) {
+      setFormError('Please enter a name!');
+      return;
+    }
+    await renameProfile(editingProfile.id, editName.trim(), editAvatar);
+    setEditName('');
+    setFormError('');
+    setShowEditProfileModal(false);
+    setEditingProfile(null);
+  };
+
+  const handleDeleteProfile = async () => {
+    if (!editingProfile) return;
+    Alert.alert(
+      "Delete Profile? ⚠️",
+      `Are you sure you want to delete ${editingProfile.name}'s profile? All stars, coins, and progress will be permanently lost.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            await deleteProfile(editingProfile.id);
+            setEditName('');
+            setFormError('');
+            setShowEditProfileModal(false);
+            setEditingProfile(null);
+            if (profiles.length <= 1) {
+              setIsEditing(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleSelectProfile = async (id: string) => {
@@ -187,7 +235,19 @@ function AppContent() {
           <View style={styles.topSpacer} />
           <Mascot expression="happy" message="Welcome to Braintune! Let's choose your profile!" size={120} />
           
-          <Text style={styles.screenTitle}>Who is playing?</Text>
+          <View style={styles.profileSelectHeader}>
+            <Text style={styles.profileSelectTitle}>Who is playing?</Text>
+            {profiles.length > 0 && (
+              <TouchableOpacity
+                style={styles.editBtnToggle}
+                onPress={() => setIsEditing(!isEditing)}
+              >
+                <Text style={styles.editBtnToggleText}>
+                  {isEditing ? 'Done ✅' : 'Edit ✏️'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
           
           <ScrollView
             contentContainerStyle={styles.profilesList}
@@ -197,14 +257,25 @@ function AppContent() {
               <TouchableOpacity
                 key={p.id}
                 style={styles.profileCard}
-                onPress={() => handleSelectProfile(p.id)}
+                onPress={() => {
+                  if (isEditing) {
+                    setEditingProfile(p);
+                    setEditName(p.name);
+                    setEditAvatar(p.avatar);
+                    setShowEditProfileModal(true);
+                  } else {
+                    handleSelectProfile(p.id);
+                  }
+                }}
               >
                 <Text style={styles.profileAvatar}>{p.avatar}</Text>
                 <View style={styles.profileInfo}>
                   <Text style={styles.profileName}>{p.name}</Text>
                   <Text style={styles.profileStars}>⭐ {p.stars} stars  •  🪙 {p.coins || 0} coins</Text>
                 </View>
-                <Text style={styles.chevron}>▶</Text>
+                <Text style={isEditing ? styles.editIndicator : styles.chevron}>
+                  {isEditing ? '✏️' : '▶'}
+                </Text>
               </TouchableOpacity>
             ))}
 
@@ -488,6 +559,84 @@ function AppContent() {
         </View>
       </Modal>
 
+      {/* EDIT PROFILE MODAL */}
+      <Modal
+        animationType="slide"
+        transparent
+        visible={showEditProfileModal}
+        onRequestClose={() => {
+          setShowEditProfileModal(false);
+          setEditingProfile(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Edit Child Profile</Text>
+
+            <Text style={styles.inputLabel}>Name / Nickname</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="e.g. Liam, Sophia"
+              placeholderTextColor={COLORS.textMuted}
+              value={editName}
+              onChangeText={setEditName}
+              maxLength={12}
+            />
+
+            <Text style={styles.inputLabel}>Choose Avatar</Text>
+            <FlatList
+              data={AVATARS}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={item => item}
+              contentContainerStyle={styles.avatarsRow}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.avatarSelection,
+                    editAvatar === item ? styles.selectedAvatarBorder : null,
+                  ]}
+                  onPress={() => setEditAvatar(item)}
+                >
+                  <Text style={styles.avatarSelectionText}>{item}</Text>
+                </TouchableOpacity>
+              )}
+            />
+
+            {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalDeleteBtn]}
+                onPress={handleDeleteProfile}
+              >
+                <Text style={styles.modalDeleteBtnText}>Delete 🗑️</Text>
+              </TouchableOpacity>
+
+              <View style={styles.modalRightButtons}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.modalCancelBtn]}
+                  onPress={() => {
+                    setEditName('');
+                    setFormError('');
+                    setShowEditProfileModal(false);
+                    setEditingProfile(null);
+                  }}
+                >
+                  <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.modalSaveBtn]}
+                  onPress={handleEditProfileSave}
+                >
+                  <Text style={styles.modalSaveBtnText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* PARENTAL GATE OVERLAY */}
       <ParentGate
         isVisible={showParentGate}
@@ -664,6 +813,39 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     textAlign: 'center',
     marginVertical: 16,
+  },
+  profileSelectHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    marginVertical: 12,
+  },
+  profileSelectTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  editBtnToggle: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  editBtnToggleText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.textMuted,
+  },
+  editIndicator: {
+    fontSize: 18,
+    color: COLORS.secondary,
+    fontWeight: 'bold',
   },
   // Profiles Screen styles
   profilesList: {
@@ -1180,6 +1362,22 @@ const styles = StyleSheet.create({
   },
   modalSaveBtnText: {
     color: '#FFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  modalRightButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    flex: 2,
+  },
+  modalDeleteBtn: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    flex: 1,
+  },
+  modalDeleteBtnText: {
+    color: '#EF4444',
     fontSize: 15,
     fontWeight: 'bold',
   },

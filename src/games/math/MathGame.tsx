@@ -4,7 +4,7 @@ import { COLORS, SHADOWS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { useApp } from '../../state/AppContext';
 import { Celebration } from '../../components/Celebration';
-import { useGameSession } from '../shared/useGameSession';
+import { useGameSession, useUnlockDifficulty } from '../shared/useGameSession';
 import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
 import {
   GameHeader,
@@ -206,6 +206,7 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
   const unlocked = highestUnlockedLevel(activeStats?.math);
 
   const session = useGameSession({ gameId: 'math', startLevel: 1 });
+  const handleUnlockDifficulty = useUnlockDifficulty('math');
   const [started, setStarted] = useState(false);
   const [question, setQuestion] = useState<Question>(() => makeQuestion(1));
   const [locked, setLocked] = useState(false);
@@ -274,6 +275,7 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
           selected={session.level}
           themeColor={COLORS.math}
           onSelect={session.setLevel}
+          onUnlockDifficulty={handleUnlockDifficulty}
         />
         <TutorialCard
           title="Math & Logic ➕"
