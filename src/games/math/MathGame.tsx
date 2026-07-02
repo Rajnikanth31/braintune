@@ -52,7 +52,7 @@ function buildChoices(answer: number, count: number): number[] {
  * 20 difficulty levels ( Beginner 1-5, Easy-Medium 6-10, Medium-Hard 11-15, Advanced 16-20 ):
  */
 function makeQuestion(level: number): Question {
-  let a = 0, b = 0, c = 0, op = '+', answer = 0, text = '';
+  let a = 0, b = 0, c = 0, answer = 0, text = '';
   const choicesCount = numChoices(level);
 
   const allowedOps = ['+', '−', '×'];
