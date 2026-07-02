@@ -184,6 +184,11 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
             session.restart();
             setStarted(true);
           }}
+          onPlayNextMode={(nextLvl) => {
+            session.setLevel(nextLvl);
+            session.restart();
+            setStarted(true);
+          }}
           onBack={onBack}
         />
       </View>

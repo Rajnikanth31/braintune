@@ -101,53 +101,49 @@ interface LevelPickerProps {
 }
 
 export const LevelPicker: React.FC<LevelPickerProps> = ({
-  maxLevel,
   unlocked,
   selected,
   themeColor,
   onSelect,
-}) => (
-  <View style={styles.levelPickerContainer}>
-    <Text style={styles.levelPickerTitle}>Choose Level (1–20):</Text>
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.levelPickerScroll}
-    >
-      {Array.from({ length: maxLevel }, (_, i) => i + 1).map(lvl => {
-        const isUnlocked = lvl <= unlocked;
-        const isActive = lvl === selected;
-        return (
-          <TouchableOpacity
-            key={lvl}
-            disabled={!isUnlocked}
-            onPress={withClick(() => onSelect(lvl))}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !isUnlocked, selected: isActive }}
-            accessibilityLabel={`Level ${lvl}, ${levelLabel(lvl)}${
-              isUnlocked ? '' : ', locked'
-            }`}
-            style={[
-              styles.levelPill,
-              isActive && { backgroundColor: themeColor, borderColor: themeColor },
-              !isUnlocked && styles.levelPillLocked,
-            ]}
-          >
-            <Text
+}) => {
+  const difficulties = [
+    { name: 'Basic', range: 'Lvl 1–5', startLevel: 1, icon: '🟢' },
+    { name: 'Normal', range: 'Lvl 6–10', startLevel: 6, icon: '🟡' },
+    { name: 'Hard', range: 'Lvl 11–15', startLevel: 11, icon: '🔵' },
+    { name: 'Very Hard', range: 'Lvl 16–20', startLevel: 16, icon: '🔴' },
+  ];
+
+  return (
+    <View style={styles.difficultyContainer}>
+      <Text style={styles.difficultyTitle}>Choose Difficulty Level:</Text>
+      <View style={styles.difficultyGrid}>
+        {difficulties.map(diff => {
+          const isUnlocked = unlocked >= diff.startLevel - 1 || diff.startLevel === 1;
+          const isActive = selected >= diff.startLevel && selected < diff.startLevel + 5;
+          return (
+            <TouchableOpacity
+              key={diff.name}
+              disabled={!isUnlocked}
+              onPress={withClick(() => onSelect(diff.startLevel))}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !isUnlocked, selected: isActive }}
+              accessibilityLabel={`${diff.name} difficulty, ${diff.range}${isUnlocked ? '' : ', locked'}`}
               style={[
-                styles.levelPillText,
-                isActive && { color: '#FFF' },
-                !isUnlocked && styles.levelPillTextLocked,
+                styles.difficultyCard,
+                isActive && { borderColor: themeColor, borderWidth: 3, backgroundColor: themeColor + '15' },
+                !isUnlocked && styles.lockedDifficultyCard,
               ]}
             >
-              {isUnlocked ? lvl : '🔒'}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
-  </View>
-);
+              <Text style={styles.difficultyIcon}>{isUnlocked ? diff.icon : '🔒'}</Text>
+              <Text style={styles.difficultyName}>{diff.name}</Text>
+              <Text style={styles.difficultyRange}>{diff.range}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
 
 /* --------------------------- Pause Menu --------------------------- */
 
@@ -236,66 +232,141 @@ interface GameSuccessProps {
   onBack: () => void;
 }
 
+interface GameSuccessProps {
+  session: GameSession;
+  themeColor: string;
+  onRestart: () => void;
+  onBack: () => void;
+  onPlayNextMode?: (nextLevel: number) => void;
+}
+
 export const GameSuccess: React.FC<GameSuccessProps> = ({
   session,
   themeColor,
   onRestart,
   onBack,
-}) => (
-  <ScrollView contentContainerStyle={styles.successContent}>
-    <Celebration trigger={1} intensity="big" />
-    <Mascot expression="cheering" message="You did it! 🎉" size={140} />
+  onPlayNextMode,
+}) => {
+  const passed = session.accuracy >= 60;
+  let currentDifficulty = 'Basic';
+  let nextDifficultyName = '';
+  let nextDifficultyStart = 1;
+  let nextDifficultyIcon = '';
 
-    <View style={styles.statsCard}>
-      <Text style={styles.successTitle}>Session Complete!</Text>
-      <Text style={styles.successSub}>Look how much you learned:</Text>
+  if (session.level <= 5) {
+    currentDifficulty = 'Basic';
+    nextDifficultyName = passed ? 'Normal' : 'Basic';
+    nextDifficultyStart = passed ? 6 : 1;
+    nextDifficultyIcon = passed ? '🟡' : '🟢';
+  } else if (session.level <= 10) {
+    currentDifficulty = 'Normal';
+    nextDifficultyName = passed ? 'Hard' : 'Normal';
+    nextDifficultyStart = passed ? 11 : 6;
+    nextDifficultyIcon = passed ? '🔵' : '🟡';
+  } else if (session.level <= 15) {
+    currentDifficulty = 'Hard';
+    nextDifficultyName = passed ? 'Very Hard' : 'Hard';
+    nextDifficultyStart = passed ? 16 : 11;
+    nextDifficultyIcon = passed ? '🔴' : '🔵';
+  } else {
+    currentDifficulty = 'Very Hard';
+    nextDifficultyName = passed ? 'Legend Completed' : 'Very Hard';
+    nextDifficultyStart = passed ? 16 : 16;
+    nextDifficultyIcon = passed ? '🏆' : '🔴';
+  }
 
-      <View style={styles.successStatsRow}>
-        <Stat value={`⭐ ${session.stars}`} label="Stars" />
-        <Stat value={`🪙 ${session.coins}`} label="Coins" />
-        <Stat value={`${session.accuracy}%`} label="Accuracy" />
-      </View>
-      <Text style={[styles.successLevelLabel, { color: themeColor }]}>
-        Level: {levelLabel(session.level)} (Lvl {session.level})
-      </Text>
+  const showNextButton = passed && onPlayNextMode && session.level < 16;
 
-      {session.newBadges.length > 0 && (
-        <View style={styles.badgeReveal}>
-          <Text style={styles.badgeRevealTitle}>New badge unlocked!</Text>
-          <View style={styles.badgeRow}>
-            {session.newBadges.map(id => {
-              const b = badgeById(id);
-              if (!b) return null;
-              return (
-                <View key={id} style={styles.badgeChip}>
-                  <Text style={styles.badgeChipEmoji}>{b.emoji}</Text>
-                  <Text style={styles.badgeChipName}>{b.name}</Text>
-                </View>
-              );
-            })}
-          </View>
+  return (
+    <ScrollView contentContainerStyle={styles.successContent}>
+      <Celebration trigger={1} intensity="big" />
+      <Mascot expression="cheering" message={passed ? "You did it! 🎉" : "Good try! Keep practicing! 💪"} size={140} />
+
+      <View style={styles.statsCard}>
+        <Text style={styles.successTitle}>{passed ? "Session Complete!" : "Try Again!"}</Text>
+        <Text style={styles.successSub}>
+          {passed ? "Look how much you learned:" : "You're getting better! Let's check your stats:"}
+        </Text>
+
+        <View style={styles.successStatsRow}>
+          <Stat value={`⭐ ${session.stars}`} label="Stars" />
+          <Stat value={`🪙 ${session.coins}`} label="Coins" />
+          <Stat value={`${session.accuracy}%`} label="Accuracy" />
         </View>
-      )}
 
-      <View style={styles.successButtons}>
-        <TouchableOpacity
-          style={[styles.restartBtn, { backgroundColor: themeColor }]}
-          onPress={withClick(onRestart)}
-          accessibilityRole="button"
-        >
-          <Text style={styles.restartBtnText}>Play Again! 🔁</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.exitBtn}
-          onPress={withClick(onBack)}
-          accessibilityRole="button"
-        >
-          <Text style={styles.exitBtnText}>Back to Hub 🏠</Text>
-        </TouchableOpacity>
+        <View style={styles.difficultyBanner}>
+          <Text style={styles.difficultyBannerTitle}>Current Difficulty: {currentDifficulty}</Text>
+          {passed ? (
+            <Text style={styles.difficultyBannerSub}>
+              {session.level >= 16 ? "🏆 You mastered all difficulties!" : `🔓 Next Mode Unlocked: ${nextDifficultyIcon} ${nextDifficultyName}`}
+            </Text>
+          ) : (
+            <Text style={styles.difficultyBannerSub}>
+              🔄 Try again to unlock the next difficulty!
+            </Text>
+          )}
+        </View>
+
+        {session.newBadges.length > 0 && (
+          <View style={styles.badgeReveal}>
+            <Text style={styles.badgeRevealTitle}>New badge unlocked!</Text>
+            <View style={styles.badgeRow}>
+              {session.newBadges.map(id => {
+                const b = badgeById(id);
+                if (!b) return null;
+                return (
+                  <View key={id} style={styles.badgeChip}>
+                    <Text style={styles.badgeChipEmoji}>{b.emoji}</Text>
+                    <Text style={styles.badgeChipName}>{b.name}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        <View style={styles.successButtons}>
+          {showNextButton && (
+            <TouchableOpacity
+              style={[styles.nextModeBtn, { backgroundColor: themeColor }]}
+              onPress={withClick(() => onPlayNextMode!(nextDifficultyStart))}
+              accessibilityRole="button"
+            >
+              <Text style={styles.nextModeBtnText}>Play {nextDifficultyName} Mode! ➔</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[
+              styles.restartBtn,
+              showNextButton
+                ? { backgroundColor: COLORS.cardBackground, borderWidth: 2, borderColor: themeColor }
+                : { backgroundColor: themeColor },
+            ]}
+            onPress={withClick(onRestart)}
+            accessibilityRole="button"
+          >
+            <Text
+              style={[
+                styles.restartBtnText,
+                showNextButton && { color: themeColor },
+              ]}
+            >
+              {passed ? "Replay Mode 🔁" : "Try Again! 🔁"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.exitBtn}
+            onPress={withClick(onBack)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.exitBtnText}>Back to Hub 🏠</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  </ScrollView>
-);
+    </ScrollView>
+  );
+};
 
 const Stat: React.FC<{ value: string; label: string }> = ({ value, label }) => (
   <View style={styles.successStatItem}>
@@ -396,37 +467,56 @@ const styles = StyleSheet.create({
   roundLabel: { fontSize: 15, fontWeight: 'bold', color: COLORS.text },
   streakLabel: { fontSize: 13, fontWeight: 'bold', color: COLORS.secondary },
   difficultyLabel: { fontSize: 14, fontWeight: '700' },
-  levelPickerContainer: {
-    marginVertical: 12,
+  difficultyContainer: {
     width: '100%',
     maxWidth: 420,
     alignSelf: 'center',
     paddingHorizontal: 16,
+    marginVertical: 12,
   },
-  levelPickerTitle: {
+  difficultyTitle: {
     fontSize: 14,
     fontWeight: 'bold',
     color: COLORS.textMuted,
-    marginBottom: 6,
+    marginBottom: 10,
+    textAlign: 'center',
   },
-  levelPickerScroll: {
-    gap: 8,
-    paddingRight: 16,
+  difficultyGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+    width: '100%',
   },
-  levelPill: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  difficultyCard: {
+    width: '47%',
+    paddingVertical: 12,
+    borderRadius: 16,
     borderWidth: 2,
     borderColor: COLORS.border,
     backgroundColor: COLORS.cardBackground,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     ...SHADOWS.small,
   },
-  levelPillLocked: { backgroundColor: COLORS.background, opacity: 0.6 },
-  levelPillText: { fontSize: 16, fontWeight: 'bold', color: COLORS.text },
-  levelPillTextLocked: { fontSize: 14 },
+  lockedDifficultyCard: {
+    opacity: 0.5,
+    backgroundColor: COLORS.background,
+  },
+  difficultyIcon: {
+    fontSize: 22,
+    marginBottom: 4,
+  },
+  difficultyName: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  difficultyRange: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
   boardWrapper: {
     flex: 1,
     width: '100%',
@@ -513,6 +603,38 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'center',
   },
+  difficultyBanner: {
+    width: '100%',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 12,
+    marginVertical: 14,
+    alignItems: 'center',
+  },
+  difficultyBannerTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+  },
+  difficultyBannerSub: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  nextModeBtn: {
+    paddingVertical: 14,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+    ...SHADOWS.small,
+  },
+  nextModeBtnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
   successButtons: { width: '100%', gap: 12 },
   restartBtn: {
     paddingVertical: 14,
@@ -520,7 +642,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...SHADOWS.small,
   },
-  restartBtnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  restartBtnText: { fontSize: 16, fontWeight: 'bold', color: COLORS.text },
   exitBtn: {
     backgroundColor: COLORS.background,
     borderWidth: 1,

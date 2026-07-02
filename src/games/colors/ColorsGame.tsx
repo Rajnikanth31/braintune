@@ -80,14 +80,12 @@ function makeQuestion(level: number): Question {
   const shapePool = shuffle(SHAPES);
 
   let mode: GameMode = 'color';
-  if (level <= 5) {
-    mode = level >= 4 ? 'pattern_color' : 'color';
-  } else if (level <= 10) {
-    mode = level >= 8 ? 'pattern_color' : 'shape_color';
+  if (level <= 10) {
+    mode = 'color';
   } else if (level <= 15) {
-    mode = level >= 13 ? 'pattern_shape' : 'shape_color';
+    mode = Math.random() > 0.5 ? 'pattern_color' : 'shape_color';
   } else {
-    mode = Math.random() > 0.5 ? 'pattern_shape' : 'shape_color';
+    mode = Math.random() > 0.5 ? 'pattern_shape' : 'pattern_color';
   }
 
   if (mode === 'color') {
@@ -97,12 +95,12 @@ function makeQuestion(level: number): Question {
       id: c.hex,
       text: c.name,
       hex: c.hex,
-      emoji: '■',
+      emoji: '',
     }));
 
     return {
       mode,
-      promptText: `Tap the ${target.name} box!`,
+      promptText: 'What color is this?',
       targetHex: target.hex,
       targetEmoji: '',
       choices: finalChoices,
@@ -277,6 +275,11 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
             session.restart();
             setStarted(true);
           }}
+          onPlayNextMode={(nextLvl) => {
+            session.setLevel(nextLvl);
+            session.restart();
+            setStarted(true);
+          }}
           onBack={onBack}
         />
       </View>
@@ -373,13 +376,14 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
 
               const showCorrect = locked && isAnswer;
               const showWrong = isPicked && !isAnswer;
+              const isColorMode = question.mode === 'color';
 
               return (
                 <TouchableOpacity
                   key={choice.id}
                   style={[
                     styles.choiceCard,
-                    choice.isShapeColor ? styles.shapeColorCard : { backgroundColor: choice.hex },
+                    isColorMode ? styles.colorTextCard : (choice.isShapeColor ? styles.shapeColorCard : { backgroundColor: choice.hex }),
                     showCorrect && styles.correctCard,
                     showWrong && styles.wrongCard,
                   ]}
@@ -387,7 +391,9 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
                   accessibilityRole="button"
                   accessibilityLabel={choice.text}
                 >
-                  {choice.isShapeColor ? (
+                  {isColorMode ? (
+                    <Text style={styles.colorNameText}>{choice.text}</Text>
+                  ) : choice.isShapeColor ? (
                     <View style={styles.shapeColorContainer}>
                       <Text style={styles.choiceEmoji}>{choice.emoji}</Text>
                       <Text style={[styles.choiceSubText, { color: choice.hex }]}>{choice.text.split(' ')[0]}</Text>
@@ -468,6 +474,17 @@ const styles = StyleSheet.create({
   shapeColorCard: {
     backgroundColor: COLORS.background,
     borderColor: COLORS.border,
+  },
+  colorTextCard: {
+    backgroundColor: COLORS.cardBackground,
+    borderColor: COLORS.border,
+    width: 100,
+    height: 60,
+  },
+  colorNameText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
   },
   shapeColorContainer: {
     alignItems: 'center',

@@ -53,7 +53,8 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
 
   const { updateGameResult, settings } = useApp();
 
-  const [level, setLevel] = useState(startLevel);
+  const [startLevelState, setStartLevelState] = useState(startLevel);
+  const [adaptiveLevel, setAdaptiveLevel] = useState(startLevel);
   const [round, setRound] = useState(1);
   const [stars, setStars] = useState(0);
   const [correct, setCorrect] = useState(0);
@@ -65,6 +66,8 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
   const [correctPulse, setCorrectPulse] = useState(0);
   const [coins, setCoins] = useState(0);
   const [coinsEarned, setCoinsEarned] = useState(0);
+
+  const level = adaptive ? adaptiveLevel : Math.min(startLevelState + round - 1, maxLevel);
 
   // Refs mirror the latest values so completeRound/finish use fresh numbers
   // without depending on stale closures.
@@ -86,7 +89,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
         setBestStreak(b => Math.max(b, nextStreak));
         // Adaptive difficulty uses the freshly computed streak.
         if (adaptive) {
-          setLevel(curr => {
+          setAdaptiveLevel(curr => {
             const nl = nextDifficulty(curr, nextStreak, isCorrect, maxLevel);
             levelRef.current = nl;
             return nl;
@@ -102,10 +105,6 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
         setStars(starsRef.current);
         setCorrectPulse(p => p + 1);
 
-        // Combo logic:
-        // streak = 0 -> 1x multiplier
-        // streak = 1 -> 2x multiplier (if it's the 2nd correct in a row)
-        // streak >= 2 -> 3x multiplier
         const currentStreak = streak; // previous streak
         const mult = currentStreak >= 2 ? 3 : currentStreak >= 1 ? 2 : 1;
         const rewardCoins = 5 * mult;
@@ -117,7 +116,6 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
         setCoinsEarned(0);
       }
 
-      // Audio + tactile feedback (both respect their settings internally).
       SoundService.playSfx(isCorrect ? 'correct' : 'wrong');
       haptic(isCorrect ? 'success' : 'error', settings.soundEffectsEnabled);
       return isCorrect;
@@ -142,6 +140,9 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
   }, [gameId, updateGameResult]);
 
   const completeRound = useCallback(() => {
+    if (!adaptive) {
+      levelRef.current = Math.min(startLevelState + round - 1, maxLevel);
+    }
     setRound(prev => {
       if (prev >= rounds) {
         finish();
@@ -149,7 +150,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
       }
       return prev + 1;
     });
-  }, [rounds, finish]);
+  }, [rounds, finish, adaptive, startLevelState, round, maxLevel]);
 
   const restart = useCallback(() => {
     starsRef.current = 0;
@@ -163,7 +164,8 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     setTotal(0);
     setStreak(0);
     setBestStreak(0);
-    setLevel(startLevel);
+    setStartLevelState(startLevel);
+    setAdaptiveLevel(startLevel);
     setRound(1);
     setIsComplete(false);
     setNewBadges([]);
@@ -175,7 +177,8 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
   const setLevelExternal = useCallback((n: number) => {
     const clamped = Math.min(Math.max(n, 1), maxLevel);
     levelRef.current = clamped;
-    setLevel(clamped);
+    setStartLevelState(clamped);
+    setAdaptiveLevel(clamped);
   }, [maxLevel]);
 
   const currentCombo = streak >= 2 ? 3 : streak >= 1 ? 2 : 1;

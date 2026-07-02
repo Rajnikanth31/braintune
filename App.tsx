@@ -41,10 +41,12 @@ const AVATARS = ['🦊', '🐨', '🐰', '🐯', '🐼', '🦁', '🐻', '🦄',
 function App() {
   return (
     <ErrorBoundary>
-      <SafeAreaProvider>
+      <SafeAreaProvider style={{ flex: 1 }}>
         <AppProvider>
-          <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-          <AppContent />
+          <View style={{ flex: 1, backgroundColor: COLORS.background }}>
+            <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+            <AppContent />
+          </View>
         </AppProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

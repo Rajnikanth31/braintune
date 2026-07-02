@@ -52,97 +52,153 @@ function buildChoices(answer: number, count: number): number[] {
  * 20 difficulty levels ( Beginner 1-5, Easy-Medium 6-10, Medium-Hard 11-15, Advanced 16-20 ):
  */
 function makeQuestion(level: number): Question {
-  let a: number, b: number, c: number, op: string, answer: number;
+  let a = 0, b = 0, c = 0, op = '+', answer = 0, text = '';
+  const choicesCount = numChoices(level);
 
-  switch (level) {
-    case 1: // Add up to 5
-      op = '+'; a = randInt(1, 4); b = randInt(1, 4 - a + 1); answer = a + b; break;
-    case 2: // Add up to 10
-      op = '+'; a = randInt(1, 8); b = randInt(1, 10 - a); answer = a + b; break;
-    case 3: // Sub up to 10
-      op = '−'; a = randInt(2, 10); b = randInt(1, a - 1); answer = a - b; break;
-    case 4: // Mixed Add/Sub up to 10
+  const allowedOps = ['+', '−', '×'];
+  if (level > 10) {
+    allowedOps.push('÷');
+  }
+  const selectedOp = allowedOps[Math.floor(Math.random() * allowedOps.length)];
+
+  if (level <= 5) {
+    // BEGINNER (Levels 1-5)
+    const maxVal = level * 4;
+    if (selectedOp === '+') {
+      a = randInt(1, maxVal - 1);
+      b = randInt(1, maxVal - a);
+      answer = a + b;
+      text = `${a} + ${b}`;
+    } else if (selectedOp === '−') {
+      a = randInt(2, maxVal);
+      b = randInt(1, a - 1);
+      answer = a - b;
+      text = `${a} − ${b}`;
+    } else if (selectedOp === '×') {
+      a = randInt(1, Math.min(2 + level, 4));
+      b = randInt(1, Math.min(2 + level, 4));
+      answer = a * b;
+      text = `${a} × ${b}`;
+    } else {
+      b = randInt(1, 3);
+      answer = randInt(1, 4);
+      a = b * answer;
+      text = `${a} ÷ ${b}`;
+    }
+  } else if (level <= 10) {
+    // EASY-MEDIUM (Levels 6-10)
+    const maxVal = 20 + (level - 5) * 6;
+    if (selectedOp === '+') {
+      a = randInt(5, maxVal - 5);
+      b = randInt(5, maxVal - a);
+      answer = a + b;
+      text = `${a} + ${b}`;
+    } else if (selectedOp === '−') {
+      a = randInt(10, maxVal);
+      b = randInt(5, a - 1);
+      answer = a - b;
+      text = `${a} − ${b}`;
+    } else if (selectedOp === '×') {
+      a = randInt(2, Math.min(level, 7));
+      b = randInt(1, 8);
+      answer = a * b;
+      text = `${a} × ${b}`;
+    } else {
+      b = randInt(2, 4);
+      answer = randInt(2, 6);
+      a = b * answer;
+      text = `${a} ÷ ${b}`;
+    }
+  } else if (level <= 15) {
+    // MEDIUM-HARD (Levels 11-15)
+    if (Math.random() > 0.4) {
+      a = randInt(3, 10);
+      b = randInt(2, 6);
+      c = randInt(1, 8);
+      const subOp = Math.random() > 0.5 ? '+' : '−';
       if (Math.random() > 0.5) {
-        op = '+'; a = randInt(1, 8); b = randInt(1, 10 - a); answer = a + b;
+        if (subOp === '+') {
+          answer = a * b + c;
+          text = `${a} × ${b} + ${c}`;
+        } else {
+          answer = a * b - c;
+          if (answer < 0) answer = a * b + c;
+          text = `${a} × ${b} − ${c}`;
+        }
       } else {
-        op = '−'; a = randInt(2, 10); b = randInt(1, a - 1); answer = a - b;
+        if (subOp === '+') {
+          answer = a + b + c;
+          text = `${a} + ${b} + ${c}`;
+        } else {
+          answer = a + b - c;
+          if (answer < 0) answer = a + b + c;
+          text = `${a} + ${b} − ${c}`;
+        }
       }
-      break;
-    case 5: // Add up to 20
-      op = '+'; a = randInt(5, 15); b = randInt(1, 20 - a); answer = a + b; break;
-    case 6: // Sub up to 20
-      op = '−'; a = randInt(10, 20); b = randInt(1, a - 1); answer = a - b; break;
-    case 7: // Mixed Add/Sub up to 20
-      if (Math.random() > 0.5) {
-        op = '+'; a = randInt(5, 15); b = randInt(1, 20 - a); answer = a + b;
+    } else {
+      if (selectedOp === '+') {
+        a = randInt(10, 60);
+        b = randInt(10, 60);
+        answer = a + b;
+        text = `${a} + ${b}`;
+      } else if (selectedOp === '−') {
+        a = randInt(20, 80);
+        b = randInt(10, a - 5);
+        answer = a - b;
+        text = `${a} − ${b}`;
+      } else if (selectedOp === '×') {
+        a = randInt(2, 9);
+        b = randInt(3, 9);
+        answer = a * b;
+        text = `${a} × ${b}`;
       } else {
-        op = '−'; a = randInt(10, 20); b = randInt(1, a - 1); answer = a - b;
+        b = randInt(2, 8);
+        answer = randInt(2, 8);
+        a = b * answer;
+        text = `${a} ÷ ${b}`;
       }
-      break;
-    case 8: // Mult by 2
-      op = '×'; a = 2; b = randInt(1, 10); answer = a * b; break;
-    case 9: // Mult by 5
-      op = '×'; a = 5; b = randInt(1, 10); answer = a * b; break;
-    case 10: // Mult by 10
-      op = '×'; a = 10; b = randInt(1, 10); answer = a * b; break;
-    case 11: // Mult up to 10
-      op = '×'; a = randInt(2, 9); b = randInt(2, 9); answer = a * b; break;
-    case 12: // Div by 2, 5, 10
-      op = '÷'; b = [2, 5, 10][randInt(0, 2)]; answer = randInt(1, 10); a = b * answer; break;
-    case 13: // Div up to 50
-      op = '÷'; b = randInt(2, 6); answer = randInt(2, 8); a = b * answer; break;
-    case 14: // 3-number Add/Sub up to 20
-      a = randInt(3, 10); b = randInt(2, 8); c = randInt(1, 5);
-      if (Math.random() > 0.5) {
-        answer = a + b - c;
-        return { text: `${a} + ${b} − ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
-      } else {
-        answer = a - b + c;
-        return { text: `${a} − ${b} + ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
-      }
-    case 15: // Mult and Add/Sub
-      a = randInt(2, 5); b = randInt(2, 5); c = randInt(1, 10);
-      if (Math.random() > 0.5) {
-        answer = a * b + c;
-        return { text: `${a} × ${b} + ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
-      } else {
-        answer = a * b - c;
-        if (answer < 0) answer = a * b + c; // keep positive
-        return { text: `${a} × ${b} − ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
-      }
-    case 16: // Mult up to 12
-      op = '×'; a = randInt(2, 12); b = randInt(2, 12); answer = a * b; break;
-    case 17: // Div up to 100
-      op = '÷'; b = randInt(2, 10); answer = randInt(2, 10); a = b * answer; break;
-    case 18: // Mixed priority, e.g. 18 - 3 * 4
-      a = randInt(10, 25); b = randInt(2, 5); c = randInt(2, 4);
-      answer = a - b * c;
-      if (answer < 0) answer = a + b * c;
-      return { text: `${a} − ${b} × ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
-    case 19: // Missing number in sequence, e.g. 5, 10, ?, 20
-      a = [2, 3, 5, 10][randInt(0, 3)]; // skip value
-      b = randInt(1, 5); // starting multiplier
-      c = randInt(1, 2); // gap index: index 1 or index 2
-      if (c === 1) {
-        answer = (b + 1) * a;
-        return { text: `${b * a},  ?,  ${(b + 2) * a},  ${(b + 3) * a}`, answer, choices: buildChoices(answer, numChoices(level)) };
-      } else {
-        answer = (b + 2) * a;
-        return { text: `${b * a},  ${(b + 1) * a},  ?,  ${(b + 3) * a}`, answer, choices: buildChoices(answer, numChoices(level)) };
-      }
-    default: { // Level 20: Parenthesis / 3-step equations
-      a = randInt(2, 10); b = randInt(2, 8); c = randInt(2, 4);
+    }
+  } else {
+    // ADVANCED (Levels 16-20)
+    const styleRoll = Math.random();
+    if (styleRoll < 0.4) {
+      a = randInt(2, 10);
+      b = randInt(2, 8);
+      c = randInt(2, 5);
       if (Math.random() > 0.5) {
         answer = (a + b) * c;
-        return { text: `(${a} + ${b}) × ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
+        text = `(${a} + ${b}) × ${c}`;
       } else {
         answer = a * b - c;
         if (answer < 0) answer = a * b + c;
-        return { text: `(${a} × ${b}) − ${c}`, answer, choices: buildChoices(answer, numChoices(level)) };
+        text = `(${a} × ${b}) − ${c}`;
       }
+    } else if (styleRoll < 0.7) {
+      a = [3, 4, 5, 10][randInt(0, 3)];
+      b = randInt(2, 6);
+      c = randInt(1, 2);
+      if (c === 1) {
+        answer = (b + 1) * a;
+        text = `${b * a},  ?,  ${(b + 2) * a},  ${(b + 3) * a}`;
+      } else {
+        answer = (b + 2) * a;
+        text = `${b * a},  ${(b + 1) * a},  ?,  ${(b + 3) * a}`;
+      }
+    } else {
+      a = randInt(15, 30);
+      b = randInt(2, 6);
+      c = randInt(2, 5);
+      answer = a - b * c;
+      if (answer < 0) answer = a + b * c;
+      text = `${a} − ${b} × ${c}`;
     }
   }
-  return { text: `${a} ${op} ${b}`, answer, choices: buildChoices(answer, numChoices(level)) };
+
+  return {
+    text,
+    answer,
+    choices: buildChoices(answer, choicesCount),
+  };
 }
 
 export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
@@ -194,6 +250,11 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
           session={session}
           themeColor={COLORS.math}
           onRestart={() => {
+            session.restart();
+            setStarted(true);
+          }}
+          onPlayNextMode={(nextLvl) => {
+            session.setLevel(nextLvl);
             session.restart();
             setStarted(true);
           }}

@@ -70,11 +70,11 @@ function makeQuestion(level: number): Question {
 
   if (mode === 'start_upper') {
     answer = target.letter;
-    wordTemplate = target.word;
+    wordTemplate = '_ '.repeat(target.word.length).trim();
     distractorsPool = PHONICS.filter(p => p.letter !== target.letter).map(p => p.letter);
   } else if (mode === 'start_lower') {
     answer = target.letter.toLowerCase();
-    wordTemplate = target.word.toLowerCase();
+    wordTemplate = '_ '.repeat(target.word.length).trim();
     distractorsPool = PHONICS.filter(p => p.letter !== target.letter).map(p => p.letter.toLowerCase());
   } else if (mode === 'fill_start') {
     answer = target.letter;
@@ -160,6 +160,11 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
             session.restart();
             setStarted(true);
           }}
+          onPlayNextMode={(nextLvl) => {
+            session.setLevel(nextLvl);
+            session.restart();
+            setStarted(true);
+          }}
           onBack={onBack}
         />
       </View>
@@ -219,7 +224,7 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
 
           <View style={styles.promptCard}>
             <Text style={styles.promptEmoji}>{question.prompt.emoji}</Text>
-            {locked || picked ? (
+            {locked ? (
               <Text style={styles.promptWord}>{question.prompt.word.toUpperCase()}</Text>
             ) : (
               <Text style={styles.promptWordTemplate}>{question.wordTemplate}</Text>
