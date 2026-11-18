@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import { COLORS, SHADOWS } from '../../theme/colors';
+import { COLORS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { useApp } from '../../state/AppContext';
 import { Celebration } from '../../components/Celebration';
 import { useGameSession, useUnlockDifficulty } from '../shared/useGameSession';
 import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
+import { SoundService } from '../../audio/SoundService';
 import {
   GameHeader,
   SessionBar,
@@ -75,19 +75,18 @@ function makeQuestion(level: number): Question {
   } else if (mode === 'start_lower') {
     answer = target.letter.toLowerCase();
     wordTemplate = '_ '.repeat(target.word.length).trim();
-    distractorsPool = PHONICS.filter(p => p.letter !== target.letter).map(p => p.letter.toLowerCase());
+    distractorsPool = PHONICS.filter(p => p.letter !== target.letter).map(p =>
+      p.letter.toLowerCase(),
+    );
   } else if (mode === 'fill_start') {
     answer = target.letter;
     wordTemplate = '_ ' + target.word.substring(1).toUpperCase();
     distractorsPool = PHONICS.filter(p => p.letter !== target.letter).map(p => p.letter);
   } else {
-    // missing middle letter: e.g. "Cat" -> "C _ t" or "Ball" -> "B _ l l"
     const word = target.word.toUpperCase();
     const midIdx = Math.floor(word.length / 2);
     answer = word[midIdx];
     wordTemplate = word.substring(0, midIdx) + ' _ ' + word.substring(midIdx + 1);
-    
-    // Choose distractors from letters in the word alphabet, or letters in PHONICS
     distractorsPool = PHONICS.map(p => p.letter).filter(l => l !== answer);
   }
 
@@ -119,11 +118,13 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
 
   useEffect(() => {
     if (!started) return;
-    setQuestion(makeQuestion(session.level));
+    const q = makeQuestion(session.level);
+    setQuestion(q);
     setLocked(false);
     setPicked(null);
     setMascotExpr('thinking');
     setMascotMsg('Look at the picture. Which letter fits?');
+    SoundService.speak(`Find the missing letter for ${q.prompt.word}`);
   }, [session.round, session.level, started]);
 
   const handlePick = useCallback(
@@ -147,7 +148,7 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
 
   if (session.isComplete) {
     return (
-      <View style={styles.container}>
+      <div className="bt-game-screen">
         <GameHeader
           title="Letters & Phonics"
           themeColor={COLORS.letters}
@@ -161,20 +162,20 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
             session.restart();
             setStarted(true);
           }}
-          onPlayNextMode={(nextLvl) => {
+          onPlayNextMode={nextLvl => {
             session.setLevel(nextLvl);
             session.restart();
             setStarted(true);
           }}
           onBack={onBack}
         />
-      </View>
+      </div>
     );
   }
 
   if (!started) {
     return (
-      <View style={styles.container}>
+      <div className="bt-game-screen">
         <GameHeader
           title="Letters & Phonics"
           themeColor={COLORS.letters}
@@ -195,12 +196,12 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
           themeColor={COLORS.letters}
           onStart={() => setStarted(true)}
         />
-      </View>
+      </div>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <div className="bt-game-screen">
       <GameHeader
         title="Letters & Phonics"
         themeColor={COLORS.letters}
@@ -219,92 +220,68 @@ export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
         }}
         onExit={onBack}
       />
-      <View style={styles.content}>
+      <div className="bt-game-content">
         <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
         <GameBody>
           <SessionBar session={session} themeColor={COLORS.letters} />
 
-          <View style={styles.promptCard}>
-            <Text style={styles.promptEmoji}>{question.prompt.emoji}</Text>
+          <div className="bt-prompt-box">
+            <div style={{ fontSize: 72, lineHeight: 1.1 }}>{question.prompt.emoji}</div>
             {locked ? (
-              <Text style={styles.promptWord}>{question.prompt.word.toUpperCase()}</Text>
+              <div
+                style={{
+                  fontSize: 26,
+                  fontWeight: 700,
+                  color: 'var(--text)',
+                  marginTop: 8,
+                  letterSpacing: 2,
+                }}
+              >
+                {question.prompt.word.toUpperCase()}
+              </div>
             ) : (
-              <Text style={styles.promptWordTemplate}>{question.wordTemplate}</Text>
+              <div
+                style={{
+                  fontSize: 26,
+                  fontWeight: 700,
+                  color: COLORS.letters,
+                  marginTop: 8,
+                  letterSpacing: 4,
+                }}
+              >
+                {question.wordTemplate}
+              </div>
             )}
-          </View>
+          </div>
 
-          <View style={styles.choices}>
+          <div className="bt-choices-grid">
             {question.choices.map(letter => {
               const isPicked = picked === letter;
               const isAnswer = letter === question.answer;
               const showCorrect = locked && isAnswer;
               const showWrong = isPicked && !isAnswer;
               return (
-                <TouchableOpacity
+                <button
+                  type="button"
                   key={letter}
-                  style={[
-                    styles.letterBtn,
-                    showCorrect && styles.correctBtn,
-                    showWrong && styles.wrongBtn,
-                  ]}
-                  onPress={() => handlePick(letter)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Letter ${letter}`}
+                  className={`bt-choice-btn ${showCorrect ? 'correct' : ''} ${showWrong ? 'wrong' : ''}`}
+                  style={{
+                    width: 60,
+                    height: 60,
+                    borderColor: COLORS.letters,
+                    color: COLORS.letters,
+                    fontSize: 28,
+                  }}
+                  onClick={() => handlePick(letter)}
+                  aria-label={`Letter ${letter}`}
                 >
-                  <Text style={styles.letterText}>{letter}</Text>
-                </TouchableOpacity>
+                  {letter}
+                </button>
               );
             })}
-          </View>
+          </div>
         </GameBody>
-      </View>
-    </View>
+      </div>
+    </div>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  content: { flex: 1, padding: 16, alignItems: 'center' },
-  promptCard: {
-    alignItems: 'center',
-    backgroundColor: COLORS.background,
-    borderRadius: 20,
-    paddingVertical: 20,
-    marginBottom: 20,
-  },
-  promptEmoji: { fontSize: 72 },
-  promptWord: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginTop: 8,
-    letterSpacing: 2,
-  },
-  promptWordTemplate: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: COLORS.letters,
-    marginTop: 8,
-    letterSpacing: 4,
-  },
-  choices: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  letterBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: COLORS.letters,
-    backgroundColor: COLORS.cardBackground,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...SHADOWS.small,
-  },
-  correctBtn: { backgroundColor: COLORS.correctGreen, borderColor: COLORS.success },
-  wrongBtn: { backgroundColor: COLORS.incorrectRed, borderColor: COLORS.secondary },
-  letterText: { fontSize: 28, fontWeight: 'bold', color: COLORS.letters },
-});

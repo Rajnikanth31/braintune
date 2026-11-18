@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import { COLORS, SHADOWS } from '../../theme/colors';
+import { COLORS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { useApp } from '../../state/AppContext';
 import { Celebration } from '../../components/Celebration';
 import { useGameSession, useUnlockDifficulty } from '../shared/useGameSession';
 import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
+import { SoundService } from '../../audio/SoundService';
 import {
   GameHeader,
   SessionBar,
@@ -25,11 +25,10 @@ const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => 0.5 - Math.random());
 const randInt = (min: number, max: number) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
-// Scaling rules
 const maxCountForLevel = (level: number) => {
-  if (level <= 5) return 1 + level * 2; // L1=3..L5=11
-  if (level <= 10) return 10 + (level - 5) * 2; // L6-10=12..20
-  return 20 + (level - 10) * 4; // L11-20=24..60
+  if (level <= 5) return 1 + level * 2;
+  if (level <= 10) return 10 + (level - 5) * 2;
+  return 20 + (level - 10) * 4;
 };
 
 const numChoices = (level: number) => Math.min(3 + Math.floor(level / 5), 6);
@@ -39,8 +38,8 @@ type Mode = 'count' | 'sequence';
 interface Question {
   mode: Mode;
   emoji: string;
-  count: number; // for count mode
-  sequence: number[]; // for sequence mode (with a gap shown as null-equivalent)
+  count: number;
+  sequence: number[];
   answer: number;
   choices: number[];
 }
@@ -65,7 +64,6 @@ function makeQuestion(level: number): Question {
   const max = maxCountForLevel(level);
   const choicesCount = numChoices(level);
 
-  // Sequences only from level 3 onwards.
   const mode: Mode = level >= 3 && Math.random() > 0.5 ? 'sequence' : 'count';
 
   if (mode === 'sequence') {
@@ -75,32 +73,27 @@ function makeQuestion(level: number): Question {
     let answer = 0;
 
     if (level <= 5) {
-      // simple counting: e.g. 2, 3, 4 -> 5
       start = randInt(1, 10);
       step = 1;
       seq = [start, start + 1, start + 2];
       answer = start + 3;
     } else if (level <= 10) {
-      // simple skip by 2s or 5s: e.g. 2, 4, 6 -> 8 or 5, 10, 15 -> 20
       step = Math.random() > 0.5 ? 2 : 5;
       start = randInt(1, 5) * step;
       seq = [start, start + step, start + step * 2];
       answer = start + step * 3;
     } else if (level <= 15) {
-      // descending sequences: e.g. 10, 8, 6 -> 4 or 20, 15, 10 -> 5
       step = Math.random() > 0.5 ? -2 : -5;
       start = step === -2 ? randInt(8, 15) * 2 : randInt(4, 7) * 5;
       seq = [start, start + step, start + step * 2];
       answer = start + step * 3;
     } else {
-      // advanced skip counting: by 3s, 4s, 10s up to 100
       step = [3, 4, 10][randInt(0, 2)];
       start = randInt(1, 5) * Math.abs(step);
       if (Math.random() > 0.5) {
         seq = [start, start + step, start + step * 2];
         answer = start + step * 3;
       } else {
-        // descending from 100 or 50
         start = step === 10 ? 100 : step * 10;
         seq = [start, start - step, start - step * 2];
         answer = start - step * 3;
@@ -117,8 +110,7 @@ function makeQuestion(level: number): Question {
     };
   }
 
-  // Count mode
-  const count = randInt(1, Math.min(max, 24)); // cap count at 24 emojis for screen layout
+  const count = randInt(1, Math.min(max, 24));
   return {
     mode,
     emoji: shuffle(COUNT_EMOJIS)[0],
@@ -150,9 +142,10 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
     setLocked(false);
     setPicked(null);
     setMascotExpr('thinking');
-    setMascotMsg(
-      q.mode === 'count' ? 'How many do you see?' : 'What number comes next?',
-    );
+    const prompt =
+      q.mode === 'count' ? 'How many do you see?' : 'What number comes next?';
+    setMascotMsg(prompt);
+    SoundService.speak(prompt);
   }, [session.round, session.level, started]);
 
   const handlePick = useCallback(
@@ -176,8 +169,13 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
 
   if (session.isComplete) {
     return (
-      <View style={styles.container}>
-        <GameHeader title="Numbers & Counting" themeColor={COLORS.numbers} stars={session.stars} onBack={onBack} />
+      <div className="bt-game-screen">
+        <GameHeader
+          title="Numbers & Counting"
+          themeColor={COLORS.numbers}
+          stars={session.stars}
+          onBack={onBack}
+        />
         <GameSuccess
           session={session}
           themeColor={COLORS.numbers}
@@ -185,21 +183,26 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
             session.restart();
             setStarted(true);
           }}
-          onPlayNextMode={(nextLvl) => {
+          onPlayNextMode={nextLvl => {
             session.setLevel(nextLvl);
             session.restart();
             setStarted(true);
           }}
           onBack={onBack}
         />
-      </View>
+      </div>
     );
   }
 
   if (!started) {
     return (
-      <View style={styles.container}>
-        <GameHeader title="Numbers & Counting" themeColor={COLORS.numbers} stars={0} onBack={onBack} />
+      <div className="bt-game-screen">
+        <GameHeader
+          title="Numbers & Counting"
+          themeColor={COLORS.numbers}
+          stars={0}
+          onBack={onBack}
+        />
         <LevelPicker
           maxLevel={MAX_LEVEL}
           unlocked={unlocked}
@@ -214,25 +217,12 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
           themeColor={COLORS.numbers}
           onStart={() => setStarted(true)}
         />
-      </View>
+      </div>
     );
   }
 
-  // Generate grid of count emojis
-  const renderCountItems = () => {
-    return (
-      <View style={styles.emojiGrid}>
-        {Array.from({ length: question.count }).map((_, i) => (
-          <Text key={i} style={styles.emojiItem}>
-            {question.emoji}
-          </Text>
-        ))}
-      </View>
-    );
-  };
-
   return (
-    <View style={styles.container}>
+    <div className="bt-game-screen">
       <GameHeader
         title="Numbers & Counting"
         themeColor={COLORS.numbers}
@@ -251,109 +241,80 @@ export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
         }}
         onExit={onBack}
       />
-      <View style={styles.content}>
+      <div className="bt-game-content">
         <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
         <GameBody>
           <SessionBar session={session} themeColor={COLORS.numbers} />
 
-          <View style={styles.boardArea}>
+          <div className="bt-prompt-box">
             {question.mode === 'count' ? (
-              renderCountItems()
-            ) : (
-              <View style={styles.sequenceCard}>
-                {question.sequence.map((n, i) => (
-                  <Text key={i} style={styles.seqItem}>
-                    {n}
-                  </Text>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  justifyContent: 'center',
+                  gap: 12,
+                }}
+              >
+                {Array.from({ length: question.count }).map((_, i) => (
+                  <span key={i} style={{ fontSize: 36, lineHeight: 1.1 }}>
+                    {question.emoji}
+                  </span>
                 ))}
-                <Text style={[styles.seqItem, styles.seqTarget]}>?</Text>
-              </View>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                {question.sequence.map((n, i) => (
+                  <span
+                    key={i}
+                    style={{ fontSize: 28, fontWeight: 700, color: 'var(--text)' }}
+                  >
+                    {n}
+                  </span>
+                ))}
+                <span
+                  style={{
+                    fontSize: 32,
+                    fontWeight: 700,
+                    color: COLORS.numbers,
+                    borderBottom: `3px solid ${COLORS.numbers}`,
+                    padding: '0 6px',
+                  }}
+                >
+                  ?
+                </span>
+              </div>
             )}
-          </View>
+          </div>
 
-          <View style={styles.choices}>
+          <div className="bt-choices-grid">
             {question.choices.map(choice => {
               const isPicked = picked === choice;
               const isAnswer = choice === question.answer;
               const showCorrect = locked && isAnswer;
               const showWrong = isPicked && !isAnswer;
               return (
-                <TouchableOpacity
+                <button
+                  type="button"
                   key={choice}
-                  style={[
-                    styles.choiceBtn,
-                    showCorrect && styles.correctBtn,
-                    showWrong && styles.wrongBtn,
-                  ]}
-                  onPress={() => handlePick(choice)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Choice ${choice}`}
+                  className={`bt-choice-btn ${showCorrect ? 'correct' : ''} ${showWrong ? 'wrong' : ''}`}
+                  style={{
+                    width: 60,
+                    height: 60,
+                    borderColor: COLORS.numbers,
+                    color: COLORS.numbers,
+                    fontSize: 26,
+                  }}
+                  onClick={() => handlePick(choice)}
+                  aria-label={`Choice ${choice}`}
                 >
-                  <Text style={styles.choiceText}>{choice}</Text>
-                </TouchableOpacity>
+                  {choice}
+                </button>
               );
             })}
-          </View>
+          </div>
         </GameBody>
-      </View>
-    </View>
+      </div>
+    </div>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  content: { flex: 1, padding: 16, alignItems: 'center' },
-  boardArea: {
-    minHeight: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.background,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 20,
-  },
-  emojiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  emojiItem: { fontSize: 36 },
-  sequenceCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
-  seqItem: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.text,
-  },
-  seqTarget: {
-    color: COLORS.numbers,
-    fontSize: 32,
-    borderBottomWidth: 3,
-    borderBottomColor: COLORS.numbers,
-    paddingHorizontal: 6,
-  },
-  choices: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  choiceBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: COLORS.numbers,
-    backgroundColor: COLORS.cardBackground,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...SHADOWS.small,
-  },
-  correctBtn: { backgroundColor: COLORS.correctGreen, borderColor: COLORS.success },
-  wrongBtn: { backgroundColor: COLORS.incorrectRed, borderColor: COLORS.secondary },
-  choiceText: { fontSize: 26, fontWeight: 'bold', color: COLORS.numbers },
-});

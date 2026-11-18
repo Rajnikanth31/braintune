@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   xpForStars,
   levelForXp,
@@ -13,23 +12,23 @@ import {
 export interface ChildProfile {
   id: string;
   name: string;
-  avatar: string; // Name/key of the avatar asset
-  stars: number; // Total stars earned
+  avatar: string;
+  stars: number;
   completedSessions: number;
-  lastPlayed: string; // ISO string
-  xp: number; // Lifetime experience points (drives global level)
-  level: number; // Global player level derived from xp
-  streak: number; // Consecutive-day play streak
-  lastDayKey?: string; // Local day key (YYYY-MM-DD) of last play
-  badges: string[]; // Earned badge ids
-  coins: number; // Coins currency
+  lastPlayed: string;
+  xp: number;
+  level: number;
+  streak: number;
+  lastDayKey?: string;
+  badges: string[];
+  coins: number;
 }
 
 export interface GameStat {
-  gameId: string; // 'letters', 'numbers', 'colors', 'memory'
+  gameId: string;
   starsEarned: number;
   sessionsPlayed: number;
-  successRate: number; // Percentage of correct taps
+  successRate: number;
   highestDifficultyReached: number;
 }
 
@@ -48,7 +47,6 @@ export interface AppSettings {
   soundEffectsEnabled: boolean;
   musicEnabled: boolean;
   voiceInstructionsEnabled: boolean;
-  // Accessibility options
   highContrast: boolean;
   reducedMotion: boolean;
   largeText: boolean;
@@ -63,11 +61,47 @@ const DEFAULT_SETTINGS: AppSettings = {
   largeText: false,
 };
 
-/** Ensure a stored profile has every field the current app expects. */
+const memoryFallback = new Map<string, string>();
+
+const storage = {
+  getItem(key: string): string | null {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(key);
+      }
+    } catch {
+      // Fallback if localStorage is blocked
+    }
+    return memoryFallback.get(key) ?? null;
+  },
+  setItem(key: string, value: string): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, value);
+        return;
+      }
+    } catch {
+      // Fallback
+    }
+    memoryFallback.set(key, value);
+  },
+  removeItem(key: string): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(key);
+        return;
+      }
+    } catch {
+      // Fallback
+    }
+    memoryFallback.delete(key);
+  },
+};
+
 function normalizeProfile(p: Partial<ChildProfile> & { id: string }): ChildProfile {
   const stars = p.stars ?? 0;
-  const xp = p.xp ?? xpForStars(stars); // derive XP for pre-XP saves
-  const coins = p.coins ?? (stars * 5); // backfill coins
+  const xp = p.xp ?? xpForStars(stars);
+  const coins = p.coins ?? stars * 5;
   return {
     id: p.id,
     name: p.name ?? 'Friend',
@@ -85,12 +119,10 @@ function normalizeProfile(p: Partial<ChildProfile> & { id: string }): ChildProfi
 }
 
 export const DB = {
-  // Profiles
   async getProfiles(): Promise<ChildProfile[]> {
     try {
-      const data = await AsyncStorage.getItem(KEYS.PROFILES);
+      const data = storage.getItem(KEYS.PROFILES);
       const parsed: ChildProfile[] = data ? JSON.parse(data) : [];
-      // Backfill fields added in later versions so older saves keep working.
       return parsed.map(normalizeProfile);
     } catch (e) {
       console.error('Failed to get profiles', e);
@@ -100,7 +132,7 @@ export const DB = {
 
   async saveProfiles(profiles: ChildProfile[]): Promise<void> {
     try {
-      await AsyncStorage.setItem(KEYS.PROFILES, JSON.stringify(profiles));
+      storage.setItem(KEYS.PROFILES, JSON.stringify(profiles));
     } catch (e) {
       console.error('Failed to save profiles', e);
     }
@@ -129,7 +161,7 @@ export const DB = {
 
   async getActiveProfileId(): Promise<string | null> {
     try {
-      return await AsyncStorage.getItem(KEYS.ACTIVE_PROFILE_ID);
+      return storage.getItem(KEYS.ACTIVE_PROFILE_ID);
     } catch (e) {
       console.error('Failed to get active profile ID', e);
       return null;
@@ -139,32 +171,28 @@ export const DB = {
   async setActiveProfileId(id: string | null): Promise<void> {
     try {
       if (id) {
-        await AsyncStorage.setItem(KEYS.ACTIVE_PROFILE_ID, id);
+        storage.setItem(KEYS.ACTIVE_PROFILE_ID, id);
       } else {
-        await AsyncStorage.removeItem(KEYS.ACTIVE_PROFILE_ID);
+        storage.removeItem(KEYS.ACTIVE_PROFILE_ID);
       }
     } catch (e) {
       console.error('Failed to set active profile ID', e);
     }
   },
 
-  // Stats
   async getChildStats(childId: string): Promise<ChildStats> {
     try {
-      const data = await AsyncStorage.getItem(`${KEYS.STATS_PREFIX}${childId}`);
+      const data = storage.getItem(`${KEYS.STATS_PREFIX}${childId}`);
       if (data) {
         return JSON.parse(data);
       }
-      
-      // Default empty stats structure
-      const defaultStats: ChildStats = {
+      return {
         letters: { gameId: 'letters', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
         numbers: { gameId: 'numbers', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
         colors: { gameId: 'colors', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
         memory: { gameId: 'memory', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
         math: { gameId: 'math', starsEarned: 0, sessionsPlayed: 0, successRate: 100, highestDifficultyReached: 1 },
       };
-      return defaultStats;
     } catch (e) {
       console.error(`Failed to get stats for child ${childId}`, e);
       return {};
@@ -173,7 +201,7 @@ export const DB = {
 
   async saveChildStats(childId: string, stats: ChildStats): Promise<void> {
     try {
-      await AsyncStorage.setItem(`${KEYS.STATS_PREFIX}${childId}`, JSON.stringify(stats));
+      storage.setItem(`${KEYS.STATS_PREFIX}${childId}`, JSON.stringify(stats));
     } catch (e) {
       console.error(`Failed to save stats for child ${childId}`, e);
     }
@@ -189,7 +217,6 @@ export const DB = {
     coinsEarned: number = 0
   ): Promise<{ newBadges: string[]; profile?: ChildProfile }> {
     try {
-      // 1. Update stats for this game
       const stats = await this.getChildStats(childId);
       const gameStat = stats[gameId] || {
         gameId,
@@ -199,9 +226,9 @@ export const DB = {
         highestDifficultyReached: 1,
       };
 
-      const prevTotalTaps = gameStat.sessionsPlayed * 10; // estimate past taps
+      const prevTotalTaps = gameStat.sessionsPlayed * 10;
       const prevCorrectTaps = Math.round((gameStat.successRate / 100) * prevTotalTaps);
-      
+
       const newSessions = gameStat.sessionsPlayed + 1;
       const newTotal = prevTotalTaps + totalTaps;
       const newCorrect = prevCorrectTaps + correctTaps;
@@ -224,7 +251,6 @@ export const DB = {
       };
       await this.saveChildStats(childId, stats);
 
-      // 2. Update profile: stars, XP, level, streak, sessions, badges, coins.
       const profiles = await this.getProfiles();
       const profileIndex = profiles.findIndex(p => p.id === childId);
       if (profileIndex > -1) {
@@ -240,7 +266,6 @@ export const DB = {
         profile.lastDayKey = dayKey();
         profile.lastPlayed = new Date().toISOString();
 
-        // Award any newly earned badges.
         const fresh = newlyEarnedBadges({ profile, stats }, profile.badges);
         if (fresh.length) {
           profile.badges = [...profile.badges, ...fresh];
@@ -257,7 +282,6 @@ export const DB = {
     }
   },
 
-  /** Recompute and persist the full badge set for a child (used on load). */
   async syncBadges(childId: string): Promise<void> {
     try {
       const profiles = await this.getProfiles();
@@ -296,7 +320,7 @@ export const DB = {
       const profiles = await this.getProfiles();
       const filtered = profiles.filter(p => p.id !== id);
       await this.saveProfiles(filtered);
-      await AsyncStorage.removeItem(`${KEYS.STATS_PREFIX}${id}`);
+      storage.removeItem(`${KEYS.STATS_PREFIX}${id}`);
     } catch (e) {
       console.error(`Failed to delete profile ${id}`, e);
     }
@@ -339,10 +363,9 @@ export const DB = {
     }
   },
 
-  // Settings
   async getSettings(): Promise<AppSettings> {
     try {
-      const data = await AsyncStorage.getItem(KEYS.SETTINGS);
+      const data = storage.getItem(KEYS.SETTINGS);
       return data ? { ...DEFAULT_SETTINGS, ...JSON.parse(data) } : DEFAULT_SETTINGS;
     } catch (e) {
       console.error('Failed to get settings', e);
@@ -352,7 +375,7 @@ export const DB = {
 
   async saveSettings(settings: AppSettings): Promise<void> {
     try {
-      await AsyncStorage.setItem(KEYS.SETTINGS, JSON.stringify(settings));
+      storage.setItem(KEYS.SETTINGS, JSON.stringify(settings));
     } catch (e) {
       console.error('Failed to save settings', e);
     }

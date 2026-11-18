@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import { COLORS, SHADOWS } from '../../theme/colors';
+import { COLORS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { useApp } from '../../state/AppContext';
 import { Celebration } from '../../components/Celebration';
 import { useGameSession, useUnlockDifficulty } from '../shared/useGameSession';
 import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
+import { SoundService } from '../../audio/SoundService';
 import {
   GameHeader,
   SessionBar,
@@ -26,7 +26,7 @@ const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => 0.5 - Math.random());
 const numChoices = (level: number) => Math.min(2 + Math.floor(level / 3), 6);
 
 interface Question {
-  text: string; // e.g. "3 + 4"
+  text: string;
   answer: number;
   choices: number[];
 }
@@ -48,11 +48,12 @@ function buildChoices(answer: number, count: number): number[] {
   return shuffle([...set]);
 }
 
-/**
- * 20 difficulty levels ( Beginner 1-5, Easy-Medium 6-10, Medium-Hard 11-15, Advanced 16-20 ):
- */
 function makeQuestion(level: number): Question {
-  let a = 0, b = 0, c = 0, answer = 0, text = '';
+  let a = 0;
+  let b = 0;
+  let c = 0;
+  let answer = 0;
+  let text = '';
   const choicesCount = numChoices(level);
 
   const allowedOps = ['+', '−', '×'];
@@ -62,7 +63,6 @@ function makeQuestion(level: number): Question {
   const selectedOp = allowedOps[Math.floor(Math.random() * allowedOps.length)];
 
   if (level <= 5) {
-    // BEGINNER (Levels 1-5)
     const maxVal = level * 4;
     if (selectedOp === '+') {
       a = randInt(1, maxVal - 1);
@@ -86,7 +86,6 @@ function makeQuestion(level: number): Question {
       text = `${a} ÷ ${b}`;
     }
   } else if (level <= 10) {
-    // EASY-MEDIUM (Levels 6-10)
     const maxVal = 20 + (level - 5) * 6;
     if (selectedOp === '+') {
       a = randInt(5, maxVal - 5);
@@ -110,7 +109,6 @@ function makeQuestion(level: number): Question {
       text = `${a} ÷ ${b}`;
     }
   } else if (level <= 15) {
-    // MEDIUM-HARD (Levels 11-15)
     if (Math.random() > 0.4) {
       a = randInt(3, 10);
       b = randInt(2, 6);
@@ -159,7 +157,6 @@ function makeQuestion(level: number): Question {
       }
     }
   } else {
-    // ADVANCED (Levels 16-20)
     const styleRoll = Math.random();
     if (styleRoll < 0.4) {
       a = randInt(2, 10);
@@ -217,11 +214,13 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
 
   useEffect(() => {
     if (!started) return;
-    setQuestion(makeQuestion(session.level));
+    const q = makeQuestion(session.level);
+    setQuestion(q);
     setLocked(false);
     setPicked(null);
     setMascotExpr('thinking');
     setMascotMsg('What is the answer?');
+    SoundService.speak('What is the answer?');
   }, [session.round, session.level, started]);
 
   const handlePick = useCallback(
@@ -245,8 +244,13 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
 
   if (session.isComplete) {
     return (
-      <View style={styles.container}>
-        <GameHeader title="Math & Logic" themeColor={COLORS.math} stars={session.stars} onBack={onBack} />
+      <div className="bt-game-screen">
+        <GameHeader
+          title="Math & Logic"
+          themeColor={COLORS.math}
+          stars={session.stars}
+          onBack={onBack}
+        />
         <GameSuccess
           session={session}
           themeColor={COLORS.math}
@@ -254,21 +258,26 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
             session.restart();
             setStarted(true);
           }}
-          onPlayNextMode={(nextLvl) => {
+          onPlayNextMode={nextLvl => {
             session.setLevel(nextLvl);
             session.restart();
             setStarted(true);
           }}
           onBack={onBack}
         />
-      </View>
+      </div>
     );
   }
 
   if (!started) {
     return (
-      <View style={styles.container}>
-        <GameHeader title="Math & Logic" themeColor={COLORS.math} stars={0} onBack={onBack} />
+      <div className="bt-game-screen">
+        <GameHeader
+          title="Math & Logic"
+          themeColor={COLORS.math}
+          stars={0}
+          onBack={onBack}
+        />
         <LevelPicker
           maxLevel={MAX_LEVEL}
           unlocked={unlocked}
@@ -279,16 +288,16 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
         />
         <TutorialCard
           title="Math & Logic ➕"
-          body={`Solve the math problems to earn stars and coins! Levels 1-5 build basic adding, while levels 6-15 test multiplication and division. Advanced levels 16-20 present skip counting and mixed operations!`}
+          body="Solve the math problems to earn stars and coins! Levels 1-5 build basic adding, while levels 6-15 test multiplication and division. Advanced levels 16-20 present skip counting and mixed operations!"
           themeColor={COLORS.math}
           onStart={() => setStarted(true)}
         />
-      </View>
+      </div>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <div className="bt-game-screen">
       <GameHeader
         title="Math & Logic"
         themeColor={COLORS.math}
@@ -307,77 +316,48 @@ export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
         }}
         onExit={onBack}
       />
-      <View style={styles.content}>
+      <div className="bt-game-content">
         <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
         <GameBody>
           <SessionBar session={session} themeColor={COLORS.math} />
 
-          <View style={styles.problemCard}>
-            <Text style={styles.problemText}>{question.text}</Text>
-            <Text style={styles.equals}>= ?</Text>
-          </View>
+          <div className="bt-prompt-box" style={{ padding: '24px 16px' }}>
+            <div style={{ fontSize: 38, fontWeight: 700, color: 'var(--text)', textAlign: 'center' }}>
+              {question.text}
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: COLORS.math, marginTop: 4 }}>
+              = ?
+            </div>
+          </div>
 
-          <View style={styles.choices}>
+          <div className="bt-choices-grid" style={{ gap: 14 }}>
             {question.choices.map(n => {
               const isPicked = picked === n;
               const isAnswer = n === question.answer;
               const showCorrect = locked && isAnswer;
               const showWrong = isPicked && !isAnswer;
               return (
-                <TouchableOpacity
+                <button
+                  type="button"
                   key={n}
-                  style={[
-                    styles.answerBtn,
-                    showCorrect && styles.correctBtn,
-                    showWrong && styles.wrongBtn,
-                  ]}
-                  onPress={() => handlePick(n)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Answer ${n}`}
+                  className={`bt-choice-btn ${showCorrect ? 'correct' : ''} ${showWrong ? 'wrong' : ''}`}
+                  style={{
+                    minWidth: 72,
+                    height: 64,
+                    borderColor: COLORS.math,
+                    color: COLORS.math,
+                    fontSize: 26,
+                  }}
+                  onClick={() => handlePick(n)}
+                  aria-label={`Answer ${n}`}
                 >
-                  <Text style={styles.answerText}>{n}</Text>
-                </TouchableOpacity>
+                  {n}
+                </button>
               );
             })}
-          </View>
+          </div>
         </GameBody>
-      </View>
-    </View>
+      </div>
+    </div>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  content: { flex: 1, padding: 16, alignItems: 'center' },
-  problemCard: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.background,
-    borderRadius: 20,
-    paddingVertical: 26,
-    marginBottom: 24,
-  },
-  problemText: { fontSize: 40, fontWeight: 'bold', color: COLORS.text, textAlign: 'center' },
-  equals: { fontSize: 28, fontWeight: 'bold', color: COLORS.math, marginTop: 4 },
-  choices: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 14,
-  },
-  answerBtn: {
-    minWidth: 72,
-    height: 64,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: COLORS.math,
-    backgroundColor: COLORS.cardBackground,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...SHADOWS.small,
-  },
-  correctBtn: { backgroundColor: COLORS.correctGreen, borderColor: COLORS.success },
-  wrongBtn: { backgroundColor: COLORS.incorrectRed, borderColor: COLORS.secondary },
-  answerText: { fontSize: 26, fontWeight: 'bold', color: COLORS.math },
-});

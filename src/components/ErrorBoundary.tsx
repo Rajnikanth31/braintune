@@ -1,26 +1,15 @@
 import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
-import { COLORS } from '../theme/colors';
 
 interface Props {
   children: React.ReactNode;
 }
+
 interface State {
   hasError: boolean;
   error?: Error;
   info?: string;
 }
 
-/**
- * Top-level safety net. Catches any JavaScript render/runtime error in the tree
- * below it and shows a friendly recovery screen *with the error text* instead of
- * a white-screen crash. Surfacing the message lets a parent screenshot it on a
- * device where the app fails, which is invaluable for diagnosing device-specific
- * crashes.
- *
- * Note: this catches JS errors only — it cannot catch pure-native crashes. For
- * those, capture `adb logcat` or the Play Console crash report.
- */
 export class ErrorBoundary extends React.Component<Props, State> {
   state: State = { hasError: false };
 
@@ -28,9 +17,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, info: { componentStack: string }) {
-    // Keep a copy for display; also log for adb/Metro.
-    this.setState({ info: info?.componentStack });
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    this.setState({ info: info?.componentStack ?? undefined });
     console.error('Braintune crashed:', error, info?.componentStack);
   }
 
@@ -43,83 +31,90 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
     const { error, info } = this.state;
     return (
-      <View style={styles.container}>
-        <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.emoji}>🤖</Text>
-          <Text style={styles.title}>Oops! Something hiccuped.</Text>
-          <Text style={styles.subtitle}>
-            Don't worry — tap below to try again. If it keeps happening, please
-            show this screen to a grown-up.
-          </Text>
+      <div
+        style={{
+          minHeight: '100vh',
+          backgroundColor: 'var(--bg)',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 28,
+        }}
+      >
+        <div style={{ fontSize: 64, marginBottom: 12 }}>🤖</div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', margin: '0 0 10px' }}>
+          Oops! Something hiccuped.
+        </h2>
+        <p
+          style={{
+            fontSize: 15,
+            color: 'var(--text-muted)',
+            textAlign: 'center',
+            lineHeight: 1.5,
+            marginBottom: 24,
+            maxWidth: 340,
+          }}
+        >
+          Don&apos;t worry — tap below to try again. If it keeps happening, please show this
+          screen to a grown-up.
+        </p>
 
-          <TouchableOpacity style={styles.button} onPress={this.handleReset}>
-            <Text style={styles.buttonText}>Try Again 🔄</Text>
-          </TouchableOpacity>
+        <button
+          type="button"
+          onClick={this.handleReset}
+          style={{
+            backgroundColor: 'var(--primary)',
+            color: '#FFF',
+            padding: '14px 40px',
+            borderRadius: 18,
+            fontSize: 17,
+            fontWeight: 700,
+            marginBottom: 24,
+          }}
+        >
+          Try Again 🔄
+        </button>
 
-          <View style={styles.detailsBox}>
-            <Text style={styles.detailsLabel}>Technical details</Text>
-            <Text style={styles.detailsText} selectable>
-              {error?.toString() || 'Unknown error'}
-            </Text>
-            {info ? (
-              <Text style={styles.detailsStack} selectable numberOfLines={12}>
-                {info.trim()}
-              </Text>
-            ) : null}
-          </View>
-        </ScrollView>
-      </View>
+        <div
+          style={{
+            width: '100%',
+            maxWidth: 460,
+            backgroundColor: 'var(--card)',
+            borderRadius: 14,
+            border: '1px solid var(--border)',
+            padding: 14,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: 'var(--text-muted)',
+              marginBottom: 6,
+              textTransform: 'uppercase',
+            }}
+          >
+            Technical details
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--secondary)', marginBottom: 8 }}>
+            {error?.toString() || 'Unknown error'}
+          </div>
+          {info ? (
+            <pre
+              style={{
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                fontFamily: 'monospace',
+                whiteSpace: 'pre-wrap',
+                margin: 0,
+              }}
+            >
+              {info.trim()}
+            </pre>
+          ) : null}
+        </div>
+      </div>
     );
   }
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  content: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 28,
-  },
-  emoji: { fontSize: 64, marginBottom: 12 },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 24,
-    maxWidth: 320,
-  },
-  button: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    borderRadius: 18,
-    marginBottom: 24,
-  },
-  buttonText: { color: '#FFF', fontSize: 17, fontWeight: 'bold' },
-  detailsBox: {
-    width: '100%',
-    backgroundColor: COLORS.cardBackground,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 14,
-  },
-  detailsLabel: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: COLORS.textMuted,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  detailsText: { fontSize: 13, color: COLORS.secondary, marginBottom: 8 },
-  detailsStack: { fontSize: 11, color: COLORS.textMuted, fontFamily: 'monospace' },
-});

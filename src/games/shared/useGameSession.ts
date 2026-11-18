@@ -1,5 +1,4 @@
 import { useCallback, useRef, useState } from 'react';
-import { Alert } from 'react-native';
 import { useApp } from '../../state/AppContext';
 import { MAX_LEVEL, ROUNDS_PER_SESSION, nextDifficulty } from './progression';
 import { haptic } from '../../audio/haptics';
@@ -26,23 +25,15 @@ export interface GameSession {
   accuracy: number;
   isComplete: boolean;
   newBadges: string[];
-  /** Increments on every correct answer — drive a celebration burst off this. */
   correctPulse: number;
   coins: number;
-  coinsEarned: number; // last coins added
-  currentCombo: number; // active streak combo multiplier (1x, 2x, 3x)
-  /** Record one answer. Returns whether it was correct (for convenience). */
+  coinsEarned: number;
+  currentCombo: number;
   recordAnswer: (isCorrect: boolean, starsAwarded?: number) => boolean;
-  /** Advance to the next round, or finish + save the session on the last round. */
   completeRound: () => void;
-  /** Reset everything for another play-through. */
   restart: () => void;
 }
 
-/**
- * Centralizes scoring, rounds, adaptive difficulty, and persistence for every
- * mini-game so individual games only describe *content*, not bookkeeping.
- */
 export function useGameSession(options: UseGameSessionOptions): GameSession {
   const {
     gameId,
@@ -70,8 +61,6 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
 
   const level = adaptive ? adaptiveLevel : Math.min(startLevelState + round - 1, maxLevel);
 
-  // Refs mirror the latest values so completeRound/finish use fresh numbers
-  // without depending on stale closures.
   const starsRef = useRef(0);
   const correctRef = useRef(0);
   const totalRef = useRef(0);
@@ -88,7 +77,6 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
       setStreak(prev => {
         nextStreak = isCorrect ? prev + 1 : 0;
         setBestStreak(b => Math.max(b, nextStreak));
-        // Adaptive difficulty uses the freshly computed streak.
         if (adaptive) {
           setAdaptiveLevel(curr => {
             const nl = nextDifficulty(curr, nextStreak, isCorrect, maxLevel);
@@ -106,7 +94,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
         setStars(starsRef.current);
         setCorrectPulse(p => p + 1);
 
-        const currentStreak = streak; // previous streak
+        const currentStreak = streak;
         const mult = currentStreak >= 2 ? 3 : currentStreak >= 1 ? 2 : 1;
         const rewardCoins = 5 * mult;
 
@@ -157,7 +145,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     starsRef.current = 0;
     correctRef.current = 0;
     totalRef.current = 0;
-    levelRef.current = startLevel;
+    levelRef.current = startLevelState;
     coinsRef.current = 0;
     savedRef.current = false;
     setStars(0);
@@ -165,22 +153,24 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
     setTotal(0);
     setStreak(0);
     setBestStreak(0);
-    setStartLevelState(startLevel);
-    setAdaptiveLevel(startLevel);
+    setAdaptiveLevel(startLevelState);
     setRound(1);
     setIsComplete(false);
     setNewBadges([]);
     setCorrectPulse(0);
     setCoins(0);
     setCoinsEarned(0);
-  }, [startLevel]);
+  }, [startLevelState]);
 
-  const setLevelExternal = useCallback((n: number) => {
-    const clamped = Math.min(Math.max(n, 1), maxLevel);
-    levelRef.current = clamped;
-    setStartLevelState(clamped);
-    setAdaptiveLevel(clamped);
-  }, [maxLevel]);
+  const setLevelExternal = useCallback(
+    (n: number) => {
+      const clamped = Math.min(Math.max(n, 1), maxLevel);
+      levelRef.current = clamped;
+      setStartLevelState(clamped);
+      setAdaptiveLevel(clamped);
+    },
+    [maxLevel],
+  );
 
   const currentCombo = streak >= 2 ? 3 : streak >= 1 ? 2 : 1;
 
@@ -208,7 +198,7 @@ export function useGameSession(options: UseGameSessionOptions): GameSession {
 }
 
 export function useUnlockDifficulty(gameId: string) {
-  const { activeProfile, unlockLevelWithCoins } = useApp();
+  const { activeProfile, unlockLevelWithCoins, showDialog } = useApp();
 
   const handleUnlockDifficulty = useCallback(
     (startLevel: number, difficultyName: string) => {
@@ -216,33 +206,33 @@ export function useUnlockDifficulty(gameId: string) {
       if (!activeProfile) return;
 
       if ((activeProfile.coins ?? 0) < cost) {
-        Alert.alert(
-          'Not Enough Coins! 🪙',
-          `You need ${cost} coins to unlock ${difficultyName} mode. Play games to earn more coins!`,
-          [{ text: 'OK', style: 'cancel' }]
-        );
+        showDialog({
+          title: 'Not Enough Coins! 🪙',
+          message: `You need ${cost} coins to unlock ${difficultyName} mode. Play games to earn more coins!`,
+          confirmText: 'OK',
+        });
         return;
       }
 
-      Alert.alert(
-        'Unlock Mode? 🪙',
-        `Would you like to unlock ${difficultyName} mode for ${cost} coins?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Unlock! 🔓',
-            onPress: async () => {
-              const success = await unlockLevelWithCoins(gameId, startLevel, cost);
-              if (success) {
-                SoundService.playSfx('win');
-                Alert.alert('Success! 🎉', `${difficultyName} mode is now unlocked!`);
-              }
-            },
-          },
-        ]
-      );
+      showDialog({
+        title: 'Unlock Mode? 🪙',
+        message: `Would you like to unlock ${difficultyName} mode for ${cost} coins?`,
+        confirmText: 'Unlock! 🔓',
+        cancelText: 'Cancel',
+        onConfirm: async () => {
+          const success = await unlockLevelWithCoins(gameId, startLevel, cost);
+          if (success) {
+            SoundService.playSfx('win');
+            showDialog({
+              title: 'Success! 🎉',
+              message: `${difficultyName} mode is now unlocked!`,
+              confirmText: 'Awesome!',
+            });
+          }
+        },
+      });
     },
-    [activeProfile, unlockLevelWithCoins, gameId]
+    [activeProfile, unlockLevelWithCoins, gameId, showDialog],
   );
 
   return handleUnlockDifficulty;

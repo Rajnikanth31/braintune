@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import { COLORS, SHADOWS } from '../../theme/colors';
+import { COLORS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { useApp } from '../../state/AppContext';
 import { Celebration } from '../../components/Celebration';
 import { useGameSession, useUnlockDifficulty } from '../shared/useGameSession';
 import { MAX_LEVEL, highestUnlockedLevel } from '../shared/progression';
+import { SoundService } from '../../audio/SoundService';
 import {
   GameHeader,
   SessionBar,
@@ -71,7 +71,7 @@ interface Question {
   targetHex: string;
   targetEmoji: string;
   choices: Choice[];
-  pattern: Choice[]; // hex sequence for pattern mode
+  pattern: Choice[];
 }
 
 function makeQuestion(level: number): Question {
@@ -90,7 +90,9 @@ function makeQuestion(level: number): Question {
 
   if (mode === 'color') {
     const target = colorPool[0];
-    const distractors = colorPool.filter(c => c.hex !== target.hex).slice(0, choicesCount - 1);
+    const distractors = colorPool
+      .filter(c => c.hex !== target.hex)
+      .slice(0, choicesCount - 1);
     const finalChoices = shuffle([target, ...distractors]).map(c => ({
       id: c.hex,
       text: c.name,
@@ -111,16 +113,16 @@ function makeQuestion(level: number): Question {
   if (mode === 'shape_color') {
     const targetColor = colorPool[0];
     const targetShape = shapePool[0];
-    
-    // Choose distractors: mix matching color/diff shape or diff color/matching shape
-    const finalChoices: Choice[] = [];
-    finalChoices.push({
-      id: `${targetShape.name}_${targetColor.hex}`,
-      text: `${targetColor.name} ${targetShape.name}`,
-      hex: targetColor.hex,
-      emoji: targetShape.emoji,
-      isShapeColor: true,
-    });
+
+    const finalChoices: Choice[] = [
+      {
+        id: `${targetShape.name}_${targetColor.hex}`,
+        text: `${targetColor.name} ${targetShape.name}`,
+        hex: targetColor.hex,
+        emoji: targetShape.emoji,
+        isShapeColor: true,
+      },
+    ];
 
     const otherColors = colorPool.filter(c => c.hex !== targetColor.hex);
     const otherShapes = shapePool.filter(s => s.name !== targetShape.name);
@@ -128,8 +130,12 @@ function makeQuestion(level: number): Question {
     let guard = 0;
     while (finalChoices.length < choicesCount && guard < 30) {
       guard++;
-      const randColor = Math.random() > 0.5 ? targetColor : otherColors[guard % otherColors.length];
-      const randShape = randColor.hex === targetColor.hex ? otherShapes[guard % otherShapes.length] : shapePool[guard % shapePool.length];
+      const randColor =
+        Math.random() > 0.5 ? targetColor : otherColors[guard % otherColors.length];
+      const randShape =
+        randColor.hex === targetColor.hex
+          ? otherShapes[guard % otherShapes.length]
+          : shapePool[guard % shapePool.length];
       const id = `${randShape.name}_${randColor.hex}`;
       if (!finalChoices.some(c => c.id === id)) {
         finalChoices.push({
@@ -153,7 +159,6 @@ function makeQuestion(level: number): Question {
   }
 
   if (mode === 'pattern_color') {
-    // ABAB or ABCABC patterns
     const isABC = level >= 8;
     const base = colorPool.slice(0, isABC ? 3 : 2);
     const reps = 2;
@@ -164,7 +169,9 @@ function makeQuestion(level: number): Question {
       });
     }
     const answer = base[patternList.length % base.length];
-    const distractors = colorPool.filter(c => c.hex !== answer.hex).slice(0, choicesCount - 1);
+    const distractors = colorPool
+      .filter(c => c.hex !== answer.hex)
+      .slice(0, choicesCount - 1);
     const finalChoices = shuffle([answer, ...distractors]).map(c => ({
       id: c.hex,
       text: c.name,
@@ -182,11 +189,9 @@ function makeQuestion(level: number): Question {
     };
   }
 
-  // mode === 'pattern_shape'
-  // Shape pattern: e.g. 🔺, 🔵, 🔺, ?
   const isABC = level >= 15;
   const base = shapePool.slice(0, isABC ? 3 : 2);
-  const color = colorPool[0]; // keep color constant so they focus on shape
+  const color = colorPool[0];
   const reps = 2;
   const patternList: Choice[] = [];
   for (let r = 0; r < reps; r++) {
@@ -195,7 +200,9 @@ function makeQuestion(level: number): Question {
     });
   }
   const answer = base[patternList.length % base.length];
-  const distractors = shapePool.filter(s => s.name !== answer.name).slice(0, choicesCount - 1);
+  const distractors = shapePool
+    .filter(s => s.name !== answer.name)
+    .slice(0, choicesCount - 1);
   const finalChoices = shuffle([answer, ...distractors]).map(s => ({
     id: s.name,
     text: s.name,
@@ -235,6 +242,7 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
     setPickedId(null);
     setMascotExpr('thinking');
     setMascotMsg(q.promptText);
+    SoundService.speak(q.promptText);
   }, [session.round, session.level, started]);
 
   const handlePick = useCallback(
@@ -247,7 +255,7 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
         correct = choice.hex === question.targetHex;
       } else if (question.mode === 'shape_color') {
         correct = choice.hex === question.targetHex && choice.emoji === question.targetEmoji;
-      } else { // pattern_shape
+      } else {
         correct = choice.emoji === question.targetEmoji;
       }
 
@@ -267,8 +275,13 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
 
   if (session.isComplete) {
     return (
-      <View style={styles.container}>
-        <GameHeader title="Colors & Shapes" themeColor={COLORS.colors} stars={session.stars} onBack={onBack} />
+      <div className="bt-game-screen">
+        <GameHeader
+          title="Colors & Shapes"
+          themeColor={COLORS.colors}
+          stars={session.stars}
+          onBack={onBack}
+        />
         <GameSuccess
           session={session}
           themeColor={COLORS.colors}
@@ -276,21 +289,26 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
             session.restart();
             setStarted(true);
           }}
-          onPlayNextMode={(nextLvl) => {
+          onPlayNextMode={nextLvl => {
             session.setLevel(nextLvl);
             session.restart();
             setStarted(true);
           }}
           onBack={onBack}
         />
-      </View>
+      </div>
     );
   }
 
   if (!started) {
     return (
-      <View style={styles.container}>
-        <GameHeader title="Colors & Shapes" themeColor={COLORS.colors} stars={0} onBack={onBack} />
+      <div className="bt-game-screen">
+        <GameHeader
+          title="Colors & Shapes"
+          themeColor={COLORS.colors}
+          stars={0}
+          onBack={onBack}
+        />
         <LevelPicker
           maxLevel={MAX_LEVEL}
           unlocked={unlocked}
@@ -305,12 +323,12 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
           themeColor={COLORS.colors}
           onStart={() => setStarted(true)}
         />
-      </View>
+      </div>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <div className="bt-game-screen">
       <GameHeader
         title="Colors & Shapes"
         themeColor={COLORS.colors}
@@ -329,49 +347,74 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
         }}
         onExit={onBack}
       />
-      <View style={styles.content}>
+      <div className="bt-game-content">
         <Mascot expression={mascotExpr} message={mascotMsg} size={100} />
         <GameBody>
           <SessionBar session={session} themeColor={COLORS.colors} />
 
-          <View style={styles.promptArea}>
+          <div className="bt-prompt-box">
             {question.pattern.length > 0 ? (
-              <View style={styles.patternCard}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                 {question.pattern.map((p, i) => (
-                  <View
+                  <div
                     key={i}
-                    style={[
-                      styles.patternItem,
-                      { backgroundColor: p.hex, borderColor: COLORS.border },
-                    ]}
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 12,
+                      border: '2px solid var(--border)',
+                      backgroundColor: p.hex,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 24,
+                    }}
                   >
-                    <Text style={styles.patternEmoji}>{p.emoji === '■' ? '' : p.emoji}</Text>
-                  </View>
+                    {p.emoji === '■' ? '' : p.emoji}
+                  </div>
                 ))}
-                <View style={[styles.patternItem, styles.patternTarget]}>
-                  <Text style={styles.targetText}>?</Text>
-                </View>
-              </View>
+                <div
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 12,
+                    border: `2px dashed ${COLORS.colors}`,
+                    backgroundColor: '#FFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 24,
+                    fontWeight: 700,
+                    color: COLORS.colors,
+                  }}
+                >
+                  ?
+                </div>
+              </div>
+            ) : question.targetEmoji ? (
+              <span style={{ fontSize: 64 }}>{question.targetEmoji}</span>
             ) : (
-              <View style={styles.singlePromptCard}>
-                {question.targetEmoji ? (
-                  <Text style={styles.promptEmoji}>{question.targetEmoji}</Text>
-                ) : (
-                  <View style={[styles.colorBlock, { backgroundColor: question.targetHex }]} />
-                )}
-              </View>
+              <div
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: 16,
+                  border: '2px solid var(--border)',
+                  backgroundColor: question.targetHex,
+                }}
+              />
             )}
-          </View>
+          </div>
 
-          <View style={styles.choices}>
+          <div className="bt-choices-grid" style={{ gap: 14 }}>
             {question.choices.map(choice => {
               const isPicked = pickedId === choice.id;
-              
               let isAnswer = false;
               if (question.mode === 'color' || question.mode === 'pattern_color') {
                 isAnswer = choice.hex === question.targetHex;
               } else if (question.mode === 'shape_color') {
-                isAnswer = choice.hex === question.targetHex && choice.emoji === question.targetEmoji;
+                isAnswer =
+                  choice.hex === question.targetHex && choice.emoji === question.targetEmoji;
               } else {
                 isAnswer = choice.emoji === question.targetEmoji;
               }
@@ -381,124 +424,52 @@ export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
               const isColorMode = question.mode === 'color';
 
               return (
-                <TouchableOpacity
+                <button
+                  type="button"
                   key={choice.id}
-                  style={[
-                    styles.choiceCard,
-                    isColorMode ? styles.colorTextCard : (choice.isShapeColor ? styles.shapeColorCard : { backgroundColor: choice.hex }),
-                    showCorrect && styles.correctCard,
-                    showWrong && styles.wrongCard,
-                  ]}
-                  onPress={() => handlePick(choice)}
-                  accessibilityRole="button"
-                  accessibilityLabel={choice.text}
+                  onClick={() => handlePick(choice)}
+                  aria-label={choice.text}
+                  style={{
+                    width: isColorMode ? 104 : 80,
+                    height: isColorMode ? 60 : 80,
+                    borderRadius: 20,
+                    border: showCorrect
+                      ? '4px solid var(--success)'
+                      : showWrong
+                        ? '4px solid var(--secondary)'
+                        : '2px solid var(--border)',
+                    backgroundColor: isColorMode
+                      ? 'var(--card)'
+                      : choice.isShapeColor
+                        ? 'var(--bg)'
+                        : choice.hex,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: 'var(--shadow-sm)',
+                  }}
                 >
                   {isColorMode ? (
-                    <Text style={styles.colorNameText}>{choice.text}</Text>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
+                      {choice.text}
+                    </span>
                   ) : choice.isShapeColor ? (
-                    <View style={styles.shapeColorContainer}>
-                      <Text style={styles.choiceEmoji}>{choice.emoji}</Text>
-                      <Text style={[styles.choiceSubText, { color: choice.hex }]}>{choice.text.split(' ')[0]}</Text>
-                    </View>
+                    <>
+                      <span style={{ fontSize: 34, lineHeight: 1.1 }}>{choice.emoji}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: choice.hex, marginTop: 2 }}>
+                        {choice.text.split(' ')[0]}
+                      </span>
+                    </>
                   ) : (
-                    <Text style={styles.choiceEmoji}>{choice.emoji === '■' ? '' : choice.emoji}</Text>
+                    <span style={{ fontSize: 36 }}>{choice.emoji === '■' ? '' : choice.emoji}</span>
                   )}
-                </TouchableOpacity>
+                </button>
               );
             })}
-          </View>
+          </div>
         </GameBody>
-      </View>
-    </View>
+      </div>
+    </div>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  content: { flex: 1, padding: 16, alignItems: 'center' },
-  promptArea: {
-    minHeight: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.background,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 20,
-  },
-  patternCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  patternItem: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  patternEmoji: { fontSize: 24 },
-  patternTarget: {
-    borderColor: COLORS.colors,
-    borderStyle: 'dashed',
-    backgroundColor: '#FFF',
-  },
-  targetText: { fontSize: 24, fontWeight: 'bold', color: COLORS.colors },
-  singlePromptCard: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  promptEmoji: { fontSize: 64 },
-  colorBlock: {
-    width: 72,
-    height: 72,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-  },
-  choices: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 14,
-  },
-  choiceCard: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...SHADOWS.small,
-  },
-  shapeColorCard: {
-    backgroundColor: COLORS.background,
-    borderColor: COLORS.border,
-  },
-  colorTextCard: {
-    backgroundColor: COLORS.cardBackground,
-    borderColor: COLORS.border,
-    width: 100,
-    height: 60,
-  },
-  colorNameText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.text,
-  },
-  shapeColorContainer: {
-    alignItems: 'center',
-  },
-  choiceEmoji: { fontSize: 36 },
-  choiceSubText: { fontSize: 11, fontWeight: 'bold', marginTop: 2 },
-  correctCard: {
-    borderColor: COLORS.success,
-    borderWidth: 4,
-  },
-  wrongCard: {
-    borderColor: COLORS.secondary,
-    borderWidth: 4,
-  },
-});

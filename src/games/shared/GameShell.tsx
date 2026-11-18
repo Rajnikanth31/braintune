@@ -1,14 +1,4 @@
 import React, { ReactNode } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
-  Switch,
-} from 'react-native';
-import { COLORS, SHADOWS } from '../../theme/colors';
 import { Mascot, MascotExpression } from '../../components/Mascot';
 import { Celebration } from '../../components/Celebration';
 import { SoundService } from '../../audio/SoundService';
@@ -16,13 +6,10 @@ import { GameSession } from './useGameSession';
 import { badgeById, levelLabel } from './progression';
 import { useApp } from '../../state/AppContext';
 
-/** Run a click sound then the action — for tactile/audio button feedback. */
 const withClick = (fn: () => void) => () => {
   SoundService.playClick();
   fn();
 };
-
-/* --------------------------- Game header --------------------------- */
 
 interface GameHeaderProps {
   title: string;
@@ -39,58 +26,50 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
   onBack,
   onPause,
 }) => (
-  <View style={[styles.header, { backgroundColor: themeColor }]}>
-    <TouchableOpacity
-      style={styles.backButton}
-      onPress={withClick(onBack)}
-      accessibilityRole="button"
-      accessibilityLabel="Go back"
+  <header className="bt-game-header" style={{ backgroundColor: themeColor }}>
+    <button
+      type="button"
+      className="bt-game-back-btn"
+      onClick={withClick(onBack)}
+      aria-label="Go back"
     >
-      <Text style={styles.backButtonText}>◀ Back</Text>
-    </TouchableOpacity>
-    <Text style={styles.title} numberOfLines={1}>
-      {title}
-    </Text>
-    <View style={styles.headerRightContainer}>
-      <View style={styles.statsContainer}>
-        <Text style={styles.starText}>⭐ {stars}</Text>
-      </View>
+      ◀ Back
+    </button>
+    <h1 className="bt-game-title">{title}</h1>
+    <div className="bt-game-header-right">
+      <div className="bt-star-pill">⭐ {stars}</div>
       {onPause && (
-        <TouchableOpacity
-          style={styles.pauseButton}
-          onPress={withClick(onPause)}
-          accessibilityRole="button"
-          accessibilityLabel="Pause Game"
+        <button
+          type="button"
+          className="bt-pause-btn"
+          onClick={withClick(onPause)}
+          aria-label="Pause Game"
         >
-          <Text style={styles.pauseButtonText}>⏸️</Text>
-        </TouchableOpacity>
+          ⏸️
+        </button>
       )}
-    </View>
-  </View>
+    </div>
+  </header>
 );
-
-/* --------------------------- Session bar --------------------------- */
 
 export const SessionBar: React.FC<{ session: GameSession; themeColor: string }> = ({
   session,
   themeColor,
 }) => (
-  <View style={styles.sessionBar}>
-    <Text style={styles.roundLabel}>
+  <div className="bt-session-bar">
+    <span className="bt-round-label">
       Round {session.round}/{session.totalRounds}
-    </Text>
+    </span>
     {session.streak >= 2 ? (
-      <Text style={styles.streakLabel}>🔥 {session.streak} in a row!</Text>
+      <span className="bt-streak-label">🔥 {session.streak} in a row!</span>
     ) : (
-      <View />
+      <span />
     )}
-    <Text style={[styles.difficultyLabel, { color: themeColor }]}>
+    <span className="bt-difficulty-label" style={{ color: themeColor }}>
       {levelLabel(session.level)}
-    </Text>
-  </View>
+    </span>
+  </div>
 );
-
-/* --------------------------- Level picker -------------------------- */
 
 interface LevelPickerProps {
   maxLevel: number;
@@ -116,43 +95,52 @@ export const LevelPicker: React.FC<LevelPickerProps> = ({
   ];
 
   return (
-    <View style={styles.difficultyContainer}>
-      <Text style={styles.difficultyTitle}>Choose Difficulty Level:</Text>
-      <View style={styles.difficultyGrid}>
+    <div className="bt-difficulty-wrap">
+      <div className="bt-difficulty-title">Choose Difficulty Level:</div>
+      <div className="bt-difficulty-grid">
         {difficulties.map(diff => {
           const isUnlocked = unlocked >= diff.startLevel - 1 || diff.startLevel === 1;
           const isActive = selected >= diff.startLevel && selected < diff.startLevel + 5;
           return (
-            <TouchableOpacity
+            <button
+              type="button"
               key={diff.name}
-              onPress={withClick(() => {
+              onClick={withClick(() => {
                 if (isUnlocked) {
                   onSelect(diff.startLevel);
                 } else if (onUnlockDifficulty) {
                   onUnlockDifficulty(diff.startLevel, diff.name);
                 }
               })}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !isUnlocked, selected: isActive }}
-              accessibilityLabel={`${diff.name} difficulty, ${diff.range}${isUnlocked ? '' : ', locked'}`}
-              style={[
-                styles.difficultyCard,
-                isActive && { borderColor: themeColor, borderWidth: 3, backgroundColor: themeColor + '15' },
-                !isUnlocked && styles.lockedDifficultyCard,
-              ]}
+              aria-pressed={isActive}
+              aria-label={`${diff.name} difficulty, ${diff.range}${isUnlocked ? '' : ', locked'}`}
+              className={`bt-difficulty-card ${!isUnlocked ? 'locked' : ''}`}
+              style={
+                isActive
+                  ? {
+                      borderColor: themeColor,
+                      borderWidth: 3,
+                      backgroundColor: `${themeColor}18`,
+                    }
+                  : undefined
+              }
             >
-              <Text style={styles.difficultyIcon}>{isUnlocked ? diff.icon : '🔒'}</Text>
-              <Text style={styles.difficultyName}>{diff.name}</Text>
-              <Text style={styles.difficultyRange}>{diff.range}</Text>
-            </TouchableOpacity>
+              <div style={{ fontSize: 22, marginBottom: 4 }}>
+                {isUnlocked ? diff.icon : '🔒'}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+                {diff.name}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                {diff.range}
+              </div>
+            </button>
           );
         })}
-      </View>
-    </View>
+      </div>
+    </div>
   );
 };
-
-/* --------------------------- Pause Menu --------------------------- */
 
 interface PauseMenuProps {
   visible: boolean;
@@ -171,73 +159,113 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
 }) => {
   const { settings, updateSettings } = useApp();
 
+  if (!visible) return null;
+
   return (
-    <Modal
-      transparent
-      visible={visible}
-      animationType="fade"
-      onRequestClose={onResume}
-    >
-      <View style={styles.modalBackdrop}>
-        <View style={styles.pauseCard}>
-          <Text style={[styles.pauseTitle, { color: themeColor }]}>Game Paused ⏸️</Text>
-          <Mascot expression="neutral" message="Take a quick break, then let's play!" size={95} />
+    <div className="bt-modal-overlay" role="dialog" aria-modal="true" onClick={onResume}>
+      <div
+        className="bt-modal-card"
+        style={{ textAlign: 'center', maxWidth: 360 }}
+        onClick={e => e.stopPropagation()}
+      >
+        <h2 style={{ fontSize: 24, fontWeight: 800, color: themeColor, margin: '0 0 8px' }}>
+          Game Paused ⏸️
+        </h2>
+        <Mascot expression="neutral" message="Take a quick break, then let's play!" size={90} />
 
-          <View style={styles.settingsGroup}>
-            <View style={styles.settingRow}>
-              <Text style={styles.settingText}>🎵 Music</Text>
-              <Switch
-                value={settings.musicEnabled}
-                onValueChange={(val) => updateSettings({ musicEnabled: val })}
-                trackColor={{ false: '#CCD1D9', true: themeColor }}
-                thumbColor={settings.musicEnabled ? '#fff' : '#f4f3f4'}
-              />
-            </View>
-            <View style={styles.settingRow}>
-              <Text style={styles.settingText}>🔊 Sound Effects</Text>
-              <Switch
-                value={settings.soundEffectsEnabled}
-                onValueChange={(val) => updateSettings({ soundEffectsEnabled: val })}
-                trackColor={{ false: '#CCD1D9', true: themeColor }}
-                thumbColor={settings.soundEffectsEnabled ? '#fff' : '#f4f3f4'}
-              />
-            </View>
-          </View>
+        <div
+          style={{
+            width: '100%',
+            backgroundColor: 'var(--bg)',
+            borderRadius: 16,
+            padding: 14,
+            margin: '14px 0',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 16, fontWeight: 600 }}>🎵 Music</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings.musicEnabled}
+              className={`bt-toggle-btn ${settings.musicEnabled ? 'bt-toggle-on' : 'bt-toggle-off'}`}
+              style={settings.musicEnabled ? { backgroundColor: themeColor } : undefined}
+              onClick={() => updateSettings({ musicEnabled: !settings.musicEnabled })}
+            >
+              {settings.musicEnabled ? 'ON' : 'OFF'}
+            </button>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 16, fontWeight: 600 }}>🔊 Sound Effects</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings.soundEffectsEnabled}
+              className={`bt-toggle-btn ${settings.soundEffectsEnabled ? 'bt-toggle-on' : 'bt-toggle-off'}`}
+              style={settings.soundEffectsEnabled ? { backgroundColor: themeColor } : undefined}
+              onClick={() =>
+                updateSettings({ soundEffectsEnabled: !settings.soundEffectsEnabled })
+              }
+            >
+              {settings.soundEffectsEnabled ? 'ON' : 'OFF'}
+            </button>
+          </div>
+        </div>
 
-          <View style={styles.pauseButtons}>
-            <TouchableOpacity
-              style={[styles.resumeBtn, { backgroundColor: themeColor }]}
-              onPress={withClick(onResume)}
-            >
-              <Text style={styles.resumeBtnText}>Resume Game ▶️</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.restartPauseBtn}
-              onPress={withClick(onRestart)}
-            >
-              <Text style={styles.restartPauseBtnText}>Restart Round 🔁</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.exitPauseBtn}
-              onPress={withClick(onExit)}
-            >
-              <Text style={styles.exitPauseBtnText}>Back to Hub 🏠</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+          <button
+            type="button"
+            style={{
+              backgroundColor: themeColor,
+              color: '#FFF',
+              padding: 14,
+              borderRadius: 18,
+              fontSize: 16,
+              fontWeight: 700,
+              boxShadow: 'var(--shadow-sm)',
+            }}
+            onClick={withClick(onResume)}
+          >
+            Resume Game ▶️
+          </button>
+          <button
+            type="button"
+            style={{
+              backgroundColor: 'var(--bg)',
+              border: '1px solid var(--border)',
+              color: 'var(--text)',
+              padding: 12,
+              borderRadius: 18,
+              fontSize: 15,
+              fontWeight: 700,
+            }}
+            onClick={withClick(onRestart)}
+          >
+            Restart Round 🔁
+          </button>
+          <button
+            type="button"
+            style={{
+              backgroundColor: 'var(--bg)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-muted)',
+              padding: 12,
+              borderRadius: 18,
+              fontSize: 15,
+              fontWeight: 700,
+            }}
+            onClick={withClick(onExit)}
+          >
+            Back to Hub 🏠
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
-
-/* --------------------------- Success screen ------------------------ */
-
-interface GameSuccessProps {
-  session: GameSession;
-  themeColor: string;
-  onRestart: () => void;
-  onBack: () => void;
-}
 
 interface GameSuccessProps {
   session: GameSession;
@@ -278,111 +306,179 @@ export const GameSuccess: React.FC<GameSuccessProps> = ({
   } else {
     currentDifficulty = 'Very Hard';
     nextDifficultyName = passed ? 'Legend Completed' : 'Very Hard';
-    nextDifficultyStart = passed ? 16 : 16;
+    nextDifficultyStart = 16;
     nextDifficultyIcon = passed ? '🏆' : '🔴';
   }
 
   const showNextButton = passed && onPlayNextMode && session.level < 16;
 
   return (
-    <ScrollView contentContainerStyle={styles.successContent}>
+    <div className="bt-center-wrap" style={{ flexDirection: 'column' }}>
       <Celebration trigger={1} intensity="big" />
-      <Mascot expression="cheering" message={passed ? "You did it! 🎉" : "Good try! Keep practicing! 💪"} size={140} />
+      <Mascot
+        expression="cheering"
+        message={passed ? 'You did it! 🎉' : 'Good try! Keep practicing! 💪'}
+        size={130}
+      />
 
-      <View style={styles.statsCard}>
-        <Text style={styles.successTitle}>{passed ? "Session Complete!" : "Try Again!"}</Text>
-        <Text style={styles.successSub}>
-          {passed ? "Look how much you learned:" : "You're getting better! Let's check your stats:"}
-        </Text>
+      <div className="bt-success-card">
+        <h2 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', margin: '0 0 8px' }}>
+          {passed ? 'Session Complete!' : 'Try Again!'}
+        </h2>
+        <p
+          style={{
+            fontSize: 14,
+            color: 'var(--text-muted)',
+            textAlign: 'center',
+            margin: '0 0 18px',
+          }}
+        >
+          {passed
+            ? 'Look how much you learned:'
+            : "You're getting better! Let's check your stats:"}
+        </p>
 
-        <View style={styles.successStatsRow}>
+        <div className="bt-success-stats-row">
           <Stat value={`⭐ ${session.stars}`} label="Stars" />
           <Stat value={`🪙 ${session.coins}`} label="Coins" />
           <Stat value={`${session.accuracy}%`} label="Accuracy" />
-        </View>
+        </div>
 
-        <View style={styles.difficultyBanner}>
-          <Text style={styles.difficultyBannerTitle}>Current Difficulty: {currentDifficulty}</Text>
-          {passed ? (
-            <Text style={styles.difficultyBannerSub}>
-              {session.level >= 16 ? "🏆 You mastered all difficulties!" : `🔓 Next Mode Unlocked: ${nextDifficultyIcon} ${nextDifficultyName}`}
-            </Text>
-          ) : (
-            <Text style={styles.difficultyBannerSub}>
-              🔄 Try again to unlock the next difficulty!
-            </Text>
-          )}
-        </View>
+        <div
+          style={{
+            width: '100%',
+            backgroundColor: '#F8FAFC',
+            borderRadius: 14,
+            border: '1px solid var(--border)',
+            padding: 12,
+            margin: '10px 0 16px',
+            textAlign: 'center',
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+            }}
+          >
+            Current Difficulty: {currentDifficulty}
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginTop: 4 }}>
+            {passed
+              ? session.level >= 16
+                ? '🏆 You mastered all difficulties!'
+                : `🔓 Next Mode Unlocked: ${nextDifficultyIcon} ${nextDifficultyName}`
+              : '🔄 Try again to unlock the next difficulty!'}
+          </div>
+        </div>
 
         {session.newBadges.length > 0 && (
-          <View style={styles.badgeReveal}>
-            <Text style={styles.badgeRevealTitle}>New badge unlocked!</Text>
-            <View style={styles.badgeRow}>
+          <div
+            style={{
+              width: '100%',
+              textAlign: 'center',
+              marginBottom: 16,
+              backgroundColor: '#FFF8E1',
+              borderRadius: 16,
+              padding: 12,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>
+              New badge unlocked!
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
               {session.newBadges.map(id => {
                 const b = badgeById(id);
                 if (!b) return null;
                 return (
-                  <View key={id} style={styles.badgeChip}>
-                    <Text style={styles.badgeChipEmoji}>{b.emoji}</Text>
-                    <Text style={styles.badgeChipName}>{b.name}</Text>
-                  </View>
+                  <div key={id} style={{ width: 80, textAlign: 'center' }}>
+                    <div style={{ fontSize: 28 }}>{b.emoji}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
+                      {b.name}
+                    </div>
+                  </div>
                 );
               })}
-            </View>
-          </View>
+            </div>
+          </div>
         )}
 
-        <View style={styles.successButtons}>
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {showNextButton && (
-            <TouchableOpacity
-              style={[styles.nextModeBtn, { backgroundColor: themeColor }]}
-              onPress={withClick(() => onPlayNextMode!(nextDifficultyStart))}
-              accessibilityRole="button"
+            <button
+              type="button"
+              style={{
+                backgroundColor: themeColor,
+                color: '#FFF',
+                padding: 14,
+                borderRadius: 18,
+                fontSize: 16,
+                fontWeight: 700,
+                boxShadow: 'var(--shadow-sm)',
+              }}
+              onClick={withClick(() => onPlayNextMode!(nextDifficultyStart))}
             >
-              <Text style={styles.nextModeBtnText}>Play {nextDifficultyName} Mode! ➔</Text>
-            </TouchableOpacity>
+              Play {nextDifficultyName} Mode! ➔
+            </button>
           )}
 
-          <TouchableOpacity
-            style={[
-              styles.restartBtn,
+          <button
+            type="button"
+            style={
               showNextButton
-                ? { backgroundColor: COLORS.cardBackground, borderWidth: 2, borderColor: themeColor }
-                : { backgroundColor: themeColor },
-            ]}
-            onPress={withClick(onRestart)}
-            accessibilityRole="button"
+                ? {
+                    backgroundColor: 'var(--card)',
+                    border: `2px solid ${themeColor}`,
+                    color: themeColor,
+                    padding: 14,
+                    borderRadius: 18,
+                    fontSize: 16,
+                    fontWeight: 700,
+                  }
+                : {
+                    backgroundColor: themeColor,
+                    color: '#FFF',
+                    padding: 14,
+                    borderRadius: 18,
+                    fontSize: 16,
+                    fontWeight: 700,
+                    boxShadow: 'var(--shadow-sm)',
+                  }
+            }
+            onClick={withClick(onRestart)}
           >
-            <Text
-              style={[
-                styles.restartBtnText,
-                showNextButton && { color: themeColor },
-              ]}
-            >
-              {passed ? "Replay Mode 🔁" : "Try Again! 🔁"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.exitBtn}
-            onPress={withClick(onBack)}
-            accessibilityRole="button"
+            {passed ? 'Replay Mode 🔁' : 'Try Again! 🔁'}
+          </button>
+
+          <button
+            type="button"
+            style={{
+              backgroundColor: 'var(--bg)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-muted)',
+              padding: 14,
+              borderRadius: 18,
+              fontSize: 16,
+              fontWeight: 700,
+            }}
+            onClick={withClick(onBack)}
           >
-            <Text style={styles.exitBtnText}>Back to Hub 🏠</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </ScrollView>
+            Back to Hub 🏠
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
 
 const Stat: React.FC<{ value: string; label: string }> = ({ value, label }) => (
-  <View style={styles.successStatItem}>
-    <Text style={styles.successStatVal}>{value}</Text>
-    <Text style={styles.successStatLabel}>{label}</Text>
-  </View>
+  <div className="bt-success-stat-item">
+    <div className="bt-success-stat-val">{value}</div>
+    <div className="bt-success-stat-lbl">{label}</div>
+  </div>
 );
-
-/* --------------------------- Tutorial card ------------------------- */
 
 interface TutorialProps {
   title: string;
@@ -397,377 +493,25 @@ export const TutorialCard: React.FC<TutorialProps> = ({
   themeColor,
   onStart,
 }) => (
-  <View style={styles.tutorialOverlay}>
-    <View style={styles.tutorialCard}>
+  <div className="bt-center-wrap">
+    <div className="bt-tutorial-card">
       <Mascot expression="happy" message={title} size={110} />
-      <Text style={styles.tutorialBody}>{body}</Text>
-      <TouchableOpacity
-        style={[styles.startBtn, { backgroundColor: themeColor }]}
-        onPress={withClick(onStart)}
-        accessibilityRole="button"
-        accessibilityLabel="Start playing"
+      <p className="bt-tutorial-body">{body}</p>
+      <button
+        type="button"
+        className="bt-start-btn"
+        style={{ backgroundColor: themeColor }}
+        onClick={withClick(onStart)}
+        aria-label="Start playing"
       >
-        <Text style={styles.startBtnText}>Let's Go! ▶</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
+        Let&apos;s Go! ▶
+      </button>
+    </div>
+  </div>
 );
-
-/* --------------------------- Generic body wrapper ------------------ */
 
 export const GameBody: React.FC<{ children: ReactNode }> = ({ children }) => (
-  <View style={styles.boardWrapper}>{children}</View>
+  <div className="bt-board-wrapper">{children}</div>
 );
-
-const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 50,
-    paddingHorizontal: 16,
-    paddingBottom: 15,
-    ...SHADOWS.small,
-  },
-  backButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  backButtonText: { color: '#FFF', fontSize: 15, fontWeight: 'bold' },
-  title: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFF',
-    textAlign: 'center',
-    marginHorizontal: 8,
-  },
-  headerRightContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  statsContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-  },
-  starText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
-  pauseButton: {
-    padding: 6,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  pauseButtonText: { fontSize: 16 },
-  sessionBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    paddingBottom: 8,
-  },
-  roundLabel: { fontSize: 15, fontWeight: 'bold', color: COLORS.text },
-  streakLabel: { fontSize: 13, fontWeight: 'bold', color: COLORS.secondary },
-  difficultyLabel: { fontSize: 14, fontWeight: '700' },
-  difficultyContainer: {
-    width: '100%',
-    maxWidth: 420,
-    alignSelf: 'center',
-    paddingHorizontal: 16,
-    marginVertical: 12,
-  },
-  difficultyTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: COLORS.textMuted,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  difficultyGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 12,
-    width: '100%',
-  },
-  difficultyCard: {
-    width: '47%',
-    paddingVertical: 12,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.cardBackground,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...SHADOWS.small,
-  },
-  lockedDifficultyCard: {
-    opacity: 0.5,
-    backgroundColor: COLORS.background,
-  },
-  difficultyIcon: {
-    fontSize: 22,
-    marginBottom: 4,
-  },
-  difficultyName: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: COLORS.text,
-  },
-  difficultyRange: {
-    fontSize: 11,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  boardWrapper: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 420,
-    alignSelf: 'center',
-    backgroundColor: COLORS.cardBackground,
-    borderRadius: 24,
-    padding: 16,
-    ...SHADOWS.medium,
-  },
-  successContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  statsCard: {
-    backgroundColor: COLORS.cardBackground,
-    borderRadius: 28,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
-    marginTop: 20,
-    borderWidth: 2,
-    borderColor: COLORS.success,
-    ...SHADOWS.large,
-  },
-  successTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: 8,
-  },
-  successSub: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  successStatsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 10,
-    backgroundColor: COLORS.background,
-    borderRadius: 20,
-    padding: 16,
-  },
-  successStatItem: { flex: 1, alignItems: 'center' },
-  successStatVal: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    marginBottom: 4,
-  },
-  successStatLabel: { fontSize: 12, color: COLORS.textMuted },
-  successLevelLabel: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  badgeReveal: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 16,
-    backgroundColor: '#FFF8E1',
-    borderRadius: 16,
-    padding: 12,
-  },
-  badgeRevealTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: 8,
-  },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
-  badgeChip: { alignItems: 'center', width: 80 },
-  badgeChipEmoji: { fontSize: 28 },
-  badgeChipName: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.textMuted,
-    textAlign: 'center',
-  },
-  difficultyBanner: {
-    width: '100%',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 12,
-    marginVertical: 14,
-    alignItems: 'center',
-  },
-  difficultyBannerTitle: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: COLORS.textMuted,
-    textTransform: 'uppercase',
-  },
-  difficultyBannerSub: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  nextModeBtn: {
-    paddingVertical: 14,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-    ...SHADOWS.small,
-  },
-  nextModeBtnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
-  successButtons: { width: '100%', gap: 12 },
-  restartBtn: {
-    paddingVertical: 14,
-    borderRadius: 18,
-    alignItems: 'center',
-    ...SHADOWS.small,
-  },
-  restartBtnText: { fontSize: 16, fontWeight: 'bold', color: COLORS.text },
-  exitBtn: {
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: 14,
-    borderRadius: 18,
-    alignItems: 'center',
-  },
-  exitBtnText: { color: COLORS.textMuted, fontSize: 16, fontWeight: 'bold' },
-  tutorialOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  tutorialCard: {
-    backgroundColor: COLORS.cardBackground,
-    borderRadius: 28,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
-    ...SHADOWS.large,
-  },
-  tutorialBody: {
-    fontSize: 15,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginVertical: 16,
-  },
-  startBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    borderRadius: 18,
-    ...SHADOWS.small,
-  },
-  startBtnText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  pauseCard: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: COLORS.cardBackground,
-    borderRadius: 28,
-    padding: 24,
-    alignItems: 'center',
-    ...SHADOWS.large,
-  },
-  pauseTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  settingsGroup: {
-    width: '100%',
-    backgroundColor: COLORS.background,
-    borderRadius: 16,
-    padding: 16,
-    marginVertical: 16,
-    gap: 12,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  settingText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  pauseButtons: {
-    width: '100%',
-    gap: 10,
-  },
-  resumeBtn: {
-    paddingVertical: 14,
-    borderRadius: 18,
-    alignItems: 'center',
-    ...SHADOWS.small,
-  },
-  resumeBtnText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  restartPauseBtn: {
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: 12,
-    borderRadius: 18,
-    alignItems: 'center',
-  },
-  restartPauseBtnText: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  exitPauseBtn: {
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: 12,
-    borderRadius: 18,
-    alignItems: 'center',
-  },
-  exitPauseBtnText: {
-    color: COLORS.textMuted,
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-});
 
 export type { MascotExpression };

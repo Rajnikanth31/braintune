@@ -1,5 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { DB, ChildProfile, ChildStats, AppSettings } from '../storage/db';
+
+export interface DialogOptions {
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  destructive?: boolean;
+  onConfirm?: () => void | Promise<void>;
+}
 
 interface AppContextType {
   profiles: ChildProfile[];
@@ -22,6 +31,7 @@ interface AppContextType {
   ) => Promise<{ newBadges: string[] }>;
   updateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
   refreshProfiles: () => Promise<void>;
+  showDialog: (opts: DialogOptions) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -39,21 +49,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     largeText: false,
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [dialog, setDialog] = useState<DialogOptions | null>(null);
 
-  // Load initial data
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        // Load Settings
         const savedSettings = await DB.getSettings();
         setSettings(savedSettings);
 
-        // Load Profiles
         const list = await DB.getProfiles();
         setProfiles(list);
 
-        // Load Active Profile
         const activeId = await DB.getActiveProfileId();
         if (activeId && list.some(p => p.id === activeId)) {
           const profile = list.find(p => p.id === activeId) || null;
@@ -84,9 +91,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const createProfile = async (name: string, avatar: string) => {
     const newProfile = await DB.addProfile(name, avatar);
-    await refreshProfiles();
-    // Auto-select if first profile
-    if (profiles.length === 0) {
+    const list = await DB.getProfiles();
+    setProfiles(list);
+    if (list.length === 1) {
       await selectProfile(newProfile.id);
     }
   };
@@ -94,7 +101,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const selectProfile = async (id: string | null) => {
     await DB.setActiveProfileId(id);
     if (id) {
-      // Recompute badges so migrated/legacy profiles reflect what they earned.
       await DB.syncBadges(id);
       const list = await DB.getProfiles();
       setProfiles(list);
@@ -132,8 +138,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       coinsEarned
     );
 
-    // Refresh local state
-    await refreshProfiles();
+    const list = await DB.getProfiles();
+    setProfiles(list);
+    const updatedProfile = list.find(p => p.id === activeProfile.id) || null;
+    setActiveProfile(updatedProfile);
     const updatedStats = await DB.getChildStats(activeProfile.id);
     setActiveStats(updatedStats);
     return { newBadges: result.newBadges };
@@ -159,17 +167,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const unlockLevelWithCoins = async (gameId: string, targetLevel: number, coinCost: number): Promise<boolean> => {
+  const unlockLevelWithCoins = async (
+    gameId: string,
+    targetLevel: number,
+    coinCost: number
+  ): Promise<boolean> => {
     if (!activeProfile) return false;
     const result = await DB.unlockLevelWithCoins(activeProfile.id, gameId, targetLevel, coinCost);
     if (result) {
-      await refreshProfiles();
+      const list = await DB.getProfiles();
+      setProfiles(list);
+      const updatedProfile = list.find(p => p.id === activeProfile.id) || null;
+      setActiveProfile(updatedProfile);
       const updatedStats = await DB.getChildStats(activeProfile.id);
       setActiveStats(updatedStats);
       return true;
     }
     return false;
   };
+
+  const showDialog = useCallback((opts: DialogOptions) => {
+    setDialog(opts);
+  }, []);
 
   return (
     <AppContext.Provider
@@ -187,9 +206,55 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateGameResult,
         updateSettings,
         refreshProfiles,
+        showDialog,
       }}
     >
       {children}
+      {dialog && (
+        <div
+          className="bt-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setDialog(null)}
+        >
+          <div className="bt-modal-card" onClick={e => e.stopPropagation()}>
+            <h3 className="bt-modal-title">{dialog.title}</h3>
+            <p
+              style={{
+                fontSize: 15,
+                color: 'var(--text-muted)',
+                textAlign: 'center',
+                lineHeight: 1.5,
+                margin: '0 0 20px',
+              }}
+            >
+              {dialog.message}
+            </p>
+            <div className="bt-modal-buttons">
+              {dialog.onConfirm && (
+                <button
+                  type="button"
+                  className="bt-modal-btn bt-modal-cancel"
+                  onClick={() => setDialog(null)}
+                >
+                  {dialog.cancelText || 'Cancel'}
+                </button>
+              )}
+              <button
+                type="button"
+                className={`bt-modal-btn ${dialog.destructive ? 'bt-modal-delete' : 'bt-modal-save'}`}
+                onClick={async () => {
+                  const cb = dialog.onConfirm;
+                  setDialog(null);
+                  if (cb) await cb();
+                }}
+              >
+                {dialog.confirmText || 'OK'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppContext.Provider>
   );
 };
