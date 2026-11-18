@@ -18,6 +18,7 @@ import {
 
 interface MathGameProps {
   onBack: () => void;
+  initialLevel?: number;
 }
 
 const randInt = (min: number, max: number) =>
@@ -198,14 +199,14 @@ function makeQuestion(level: number): Question {
   };
 }
 
-export const MathGame: React.FC<MathGameProps> = ({ onBack }) => {
+export const MathGame: React.FC<MathGameProps> = ({ onBack, initialLevel = 1 }) => {
   const { activeStats } = useApp();
   const unlocked = highestUnlockedLevel(activeStats?.math);
 
-  const session = useGameSession({ gameId: 'math', startLevel: 1 });
+  const session = useGameSession({ gameId: 'math', startLevel: initialLevel });
   const handleUnlockDifficulty = useUnlockDifficulty('math');
   const [started, setStarted] = useState(false);
-  const [question, setQuestion] = useState<Question>(() => makeQuestion(1));
+  const [question, setQuestion] = useState<Question>(() => makeQuestion(initialLevel));
   const [locked, setLocked] = useState(false);
   const [picked, setPicked] = useState<number | null>(null);
   const [mascotExpr, setMascotExpr] = useState<MascotExpression>('thinking');

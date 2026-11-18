@@ -1,5 +1,27 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { DB, ChildProfile, ChildStats, AppSettings } from '../storage/db';
+import { AchievementToast } from '../components/AchievementToast';
+import {
+  AchievementToastItem,
+  buildAchievementToasts,
+  enqueueAchievements,
+  dismissAchievement,
+} from '../components/achievementToastLogic';
+import {
+  DANCE_DURATION_MS,
+  LevelUpCelebrationMap,
+  recordLevelUpCelebration,
+  activateLevelUpCelebration,
+  pruneExpiredCelebrations,
+} from '../components/levelUpCelebrationLogic';
+import { resolveStoredRpgMiniQuest } from '../games/rpg/rpgWorldLogic';
+import { LearningRecapModal } from '../components/LearningRecapModal';
+import {
+  LearningGameId,
+  LearningRecapData,
+  buildLearningRecap,
+  isLearningGameId,
+} from '../components/learningRecapLogic';
 
 export interface DialogOptions {
   title: string;
@@ -32,6 +54,14 @@ interface AppContextType {
   updateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
   refreshProfiles: () => Promise<void>;
   showDialog: (opts: DialogOptions) => void;
+  levelUpCelebrations: LevelUpCelebrationMap;
+  startLevelUpCelebration: (profileId: string) => void;
+  learningRecap: LearningRecapData | null;
+  openLearningRecap: () => void;
+  closeLearningRecap: () => void;
+  registerRecapPlayHandler: (
+    handler: (gameId: LearningGameId, targetLevel: number) => void,
+  ) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -50,6 +80,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [dialog, setDialog] = useState<DialogOptions | null>(null);
+  const [achievementQueue, setAchievementQueue] = useState<AchievementToastItem[]>([]);
+  const [levelUpCelebrations, setLevelUpCelebrations] = useState<LevelUpCelebrationMap>({});
+  const danceTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [learningRecap, setLearningRecap] = useState<LearningRecapData | null>(null);
+  const [isLearningRecapOpen, setIsLearningRecapOpen] = useState(false);
+  const recapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recapPlayHandlerRef = useRef<
+    ((gameId: LearningGameId, targetLevel: number) => void) | null
+  >(null);
+
+  useEffect(() => {
+    const timers = danceTimersRef.current;
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+      if (recapTimerRef.current) clearTimeout(recapTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -126,7 +173,54 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     difficultyLevel: number,
     coinsEarned: number = 0
   ) => {
-    if (!activeProfile) return { newBadges: [] };
+    const unlockedKey = resolveStoredRpgMiniQuest(activeProfile?.id ?? null, gameId, correctTaps);
+    if (unlockedKey) {
+      setAchievementQueue(prev =>
+        enqueueAchievements(prev, [
+          {
+            id: `rpg_key_${unlockedKey.keyId}_${Date.now()}`,
+            kind: 'badge',
+            kicker: 'Quest Key Unlocked',
+            emoji: unlockedKey.keyEmoji,
+            title: `${unlockedKey.keyName} Unlocked!`,
+            subtitle: `Quest World reward from ${unlockedKey.npcName}`,
+            accentColor: '#10B981',
+            bgTint: '#ECFDF5',
+          },
+        ]),
+      );
+    }
+
+    const sessionAccuracy = totalTaps > 0 ? Math.round((correctTaps / totalTaps) * 100) : 100;
+
+    if (!activeProfile) {
+      if (isLearningGameId(gameId)) {
+        const guestNext: ChildStats = {
+          [gameId]: {
+            gameId,
+            starsEarned,
+            sessionsPlayed: 1,
+            successRate: sessionAccuracy,
+            highestDifficultyReached: sessionAccuracy >= 60 ? difficultyLevel + 1 : difficultyLevel,
+          },
+        };
+        const recap = buildLearningRecap({
+          playerName: 'Explorer',
+          completedGameId: gameId,
+          sessionAccuracy,
+          starsEarned,
+          difficultyLevel,
+          prevStats: null,
+          nextStats: guestNext,
+        });
+        setLearningRecap(recap);
+        if (recapTimerRef.current) clearTimeout(recapTimerRef.current);
+        recapTimerRef.current = setTimeout(() => setIsLearningRecapOpen(true), 350);
+      }
+      return { newBadges: [] };
+    }
+
+    const prevStatsSnapshot = activeStats || (await DB.getChildStats(activeProfile.id));
 
     const result = await DB.updateGameSession(
       activeProfile.id,
@@ -144,6 +238,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setActiveProfile(updatedProfile);
     const updatedStats = await DB.getChildStats(activeProfile.id);
     setActiveStats(updatedStats);
+
+    if (isLearningGameId(gameId)) {
+      const recap = buildLearningRecap({
+        playerName: updatedProfile?.name || activeProfile.name,
+        completedGameId: gameId,
+        sessionAccuracy,
+        starsEarned,
+        difficultyLevel,
+        prevStats: prevStatsSnapshot,
+        nextStats: updatedStats,
+      });
+      setLearningRecap(recap);
+      if (recapTimerRef.current) clearTimeout(recapTimerRef.current);
+      recapTimerRef.current = setTimeout(() => setIsLearningRecapOpen(true), 350);
+    }
+
+    if (result.newLevel > result.prevLevel) {
+      setLevelUpCelebrations(prev =>
+        recordLevelUpCelebration(prev, activeProfile.id, result.prevLevel, result.newLevel),
+      );
+    }
+
+    const toasts = buildAchievementToasts(
+      result.newBadges,
+      result.prevLevel,
+      result.newLevel,
+    );
+    if (toasts.length > 0) {
+      setAchievementQueue(prev => enqueueAchievements(prev, toasts));
+    }
+
     return { newBadges: result.newBadges };
   };
 
@@ -190,6 +315,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setDialog(opts);
   }, []);
 
+  const handleDismissAchievement = useCallback((id: string) => {
+    setAchievementQueue(prev => dismissAchievement(prev, id));
+  }, []);
+
+  const startLevelUpCelebration = useCallback((profileId: string) => {
+    const now = Date.now();
+    setLevelUpCelebrations(prev => {
+      const { map, activated } = activateLevelUpCelebration(prev, profileId, now, DANCE_DURATION_MS);
+      if (activated) {
+        if (danceTimersRef.current[profileId]) {
+          clearTimeout(danceTimersRef.current[profileId]);
+        }
+        danceTimersRef.current[profileId] = setTimeout(() => {
+          delete danceTimersRef.current[profileId];
+          setLevelUpCelebrations(curr => pruneExpiredCelebrations(curr, Date.now()));
+        }, DANCE_DURATION_MS);
+      }
+      return map;
+    });
+  }, []);
+
+  const openLearningRecap = useCallback(() => {
+    setIsLearningRecapOpen(true);
+  }, []);
+
+  const closeLearningRecap = useCallback(() => {
+    setIsLearningRecapOpen(false);
+  }, []);
+
+  const registerRecapPlayHandler = useCallback(
+    (handler: (gameId: LearningGameId, targetLevel: number) => void) => {
+      recapPlayHandlerRef.current = handler;
+    },
+    [],
+  );
+
   return (
     <AppContext.Provider
       value={{
@@ -207,6 +368,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateSettings,
         refreshProfiles,
         showDialog,
+        levelUpCelebrations,
+        startLevelUpCelebration,
+        learningRecap,
+        openLearningRecap,
+        closeLearningRecap,
+        registerRecapPlayHandler,
       }}
     >
       {children}
@@ -255,6 +422,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           </div>
         </div>
       )}
+      <LearningRecapModal
+        recap={isLearningRecapOpen ? learningRecap : null}
+        onClose={closeLearningRecap}
+        onPlaySuggested={(gameId, targetLevel) => {
+          setIsLearningRecapOpen(false);
+          recapPlayHandlerRef.current?.(gameId, targetLevel);
+        }}
+      />
+      <AchievementToast
+        items={achievementQueue}
+        reducedMotion={settings.reducedMotion}
+        highContrast={settings.highContrast}
+        largeText={settings.largeText}
+        onDismiss={handleDismissAchievement}
+      />
     </AppContext.Provider>
   );
 };

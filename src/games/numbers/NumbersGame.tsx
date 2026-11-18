@@ -18,6 +18,7 @@ import {
 
 interface NumbersGameProps {
   onBack: () => void;
+  initialLevel?: number;
 }
 
 const COUNT_EMOJIS = ['🍎', '⭐', '🐠', '🌸', '🎈', '🐝', '🍓', '🚗', '🐸', '🐨', '🦖', '🍭'];
@@ -121,14 +122,14 @@ function makeQuestion(level: number): Question {
   };
 }
 
-export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack }) => {
+export const NumbersGame: React.FC<NumbersGameProps> = ({ onBack, initialLevel = 1 }) => {
   const { activeStats } = useApp();
   const unlocked = highestUnlockedLevel(activeStats?.numbers);
 
-  const session = useGameSession({ gameId: 'numbers', startLevel: 1 });
+  const session = useGameSession({ gameId: 'numbers', startLevel: initialLevel });
   const handleUnlockDifficulty = useUnlockDifficulty('numbers');
   const [started, setStarted] = useState(false);
-  const [question, setQuestion] = useState<Question>(() => makeQuestion(1));
+  const [question, setQuestion] = useState<Question>(() => makeQuestion(initialLevel));
   const [locked, setLocked] = useState(false);
   const [picked, setPicked] = useState<number | null>(null);
   const [mascotExpr, setMascotExpr] = useState<MascotExpression>('thinking');

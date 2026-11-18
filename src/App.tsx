@@ -11,6 +11,9 @@ import { LettersGame } from './games/letters/LettersGame';
 import { NumbersGame } from './games/numbers/NumbersGame';
 import { ColorsGame } from './games/colors/ColorsGame';
 import { MathGame } from './games/math/MathGame';
+import { FamilyChallenge } from './games/family/FamilyChallenge';
+import { RpgWorld } from './games/rpg/RpgWorld';
+import type { MiniQuestDef } from './games/rpg/rpgWorldLogic';
 import { GAME_REGISTRY } from './games/GameRegistry';
 import { DB, ChildProfile, ChildStats } from './storage/db';
 import {
@@ -21,8 +24,17 @@ import {
   BADGES,
   badgeById,
 } from './games/shared/progression';
+import { getActiveLevelUpCelebration } from './components/levelUpCelebrationLogic';
 
 const AVATARS = ['🦊', '🐨', '🐰', '🐯', '🐼', '🦁', '🐻', '🦄', '🐸', '🐵'];
+
+const GAME_ICON_MAP: Record<string, string> = {
+  memory: '🧠',
+  letters: '🔤',
+  numbers: '🔢',
+  colors: '🎨',
+  math: '➕',
+};
 
 export function App() {
   return (
@@ -46,7 +58,16 @@ function AppContent() {
     renameProfile,
     deleteProfile,
     showDialog,
+    levelUpCelebrations,
+    startLevelUpCelebration,
+    registerRecapPlayHandler,
   } = useApp();
+
+  const [autoStartPending, setAutoStartPending] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      Boolean(new URLSearchParams(window.location.search).get('autostart')),
+  );
 
   const [currentScreen, setCurrentScreen] = useState<
     | 'profile_select'
@@ -56,8 +77,17 @@ function AppContent() {
     | 'numbers_game'
     | 'colors_game'
     | 'math_game'
+    | 'family_challenge'
+    | 'rpg_world'
     | 'parent_zone'
-  >('profile_select');
+  >(() => {
+    if (typeof window !== 'undefined') {
+      const auto = new URLSearchParams(window.location.search).get('autostart');
+      if (auto === 'rpg') return 'rpg_world';
+      if (auto === '1') return 'family_challenge';
+    }
+    return 'profile_select';
+  });
 
   const [showAddProfileModal, setShowAddProfileModal] = useState(false);
   const [showParentGate, setShowParentGate] = useState(false);
@@ -71,6 +101,12 @@ function AppContent() {
   const [editName, setEditName] = useState('');
   const [editAvatar, setEditAvatar] = useState(AVATARS[0]);
   const [formError, setFormError] = useState('');
+  const [rpgMiniQuestBanner, setRpgMiniQuestBanner] = useState<MiniQuestDef | null>(null);
+  const [suggestedStartLevel, setSuggestedStartLevel] = useState<{
+    gameId: string;
+    level: number;
+    nonce: number;
+  } | null>(null);
 
   const handleCreateProfile = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -143,12 +179,25 @@ function AppContent() {
 
   const launchGame = (gameId: string) => {
     SoundService.playClick();
+    setSuggestedStartLevel(null);
     if (gameId === 'memory') setCurrentScreen('memory_game');
     if (gameId === 'letters') setCurrentScreen('letters_game');
     if (gameId === 'numbers') setCurrentScreen('numbers_game');
     if (gameId === 'colors') setCurrentScreen('colors_game');
     if (gameId === 'math') setCurrentScreen('math_game');
   };
+
+  useEffect(() => {
+    registerRecapPlayHandler((gameId, targetLevel) => {
+      setRpgMiniQuestBanner(null);
+      setSuggestedStartLevel(prev => ({
+        gameId,
+        level: targetLevel,
+        nonce: (prev?.nonce ?? 0) + 1,
+      }));
+      setCurrentScreen(`${gameId}_game` as typeof currentScreen);
+    });
+  }, [registerRecapPlayHandler]);
 
   useEffect(() => {
     SoundService.load();
@@ -167,12 +216,28 @@ function AppContent() {
   }, [settings.voiceInstructionsEnabled]);
 
   useEffect(() => {
-    if (currentScreen.endsWith('_game')) {
+    if (
+      currentScreen.endsWith('_game') ||
+      currentScreen === 'family_challenge' ||
+      currentScreen === 'rpg_world'
+    ) {
       SoundService.startMusic();
     } else {
       SoundService.stopMusic();
     }
   }, [currentScreen]);
+
+  useEffect(() => {
+    if (currentScreen === 'hub' && activeProfile && levelUpCelebrations[activeProfile.id]) {
+      startLevelUpCelebration(activeProfile.id);
+    } else if (currentScreen === 'profile_select') {
+      profiles.forEach(p => {
+        if (levelUpCelebrations[p.id]) {
+          startLevelUpCelebration(p.id);
+        }
+      });
+    }
+  }, [currentScreen, activeProfile, profiles, levelUpCelebrations, startLevelUpCelebration]);
 
   const rootClasses = [
     'bt-root',
@@ -183,53 +248,131 @@ function AppContent() {
     .filter(Boolean)
     .join(' ');
 
-  const backToHub = () => setCurrentScreen('hub');
+  const backFromMiniGame = () => {
+    setSuggestedStartLevel(null);
+    if (rpgMiniQuestBanner) {
+      setRpgMiniQuestBanner(null);
+      setAutoStartPending(true);
+      setCurrentScreen('rpg_world');
+    } else {
+      setCurrentScreen(activeProfile ? 'hub' : 'profile_select');
+    }
+  };
+
+  const renderMiniQuestBanner = () =>
+    rpgMiniQuestBanner ? (
+      <div className="bt-rpg-game-banner" data-testid="rpg-miniquest-banner">
+        <span>
+          {rpgMiniQuestBanner.keyEmoji} <strong>Quest World Mini-Quest:</strong> Finish{' '}
+          {rpgMiniQuestBanner.gameLabel} to earn the <strong>{rpgMiniQuestBanner.keyName}</strong>!
+        </span>
+        <button
+          type="button"
+          className="bt-rpg-game-banner-btn"
+          onClick={backFromMiniGame}
+        >
+          ◀ Return to Map
+        </button>
+      </div>
+    ) : null;
 
   if (currentScreen === 'memory_game') {
+    const lvl = suggestedStartLevel?.gameId === 'memory' ? suggestedStartLevel.level : undefined;
+    const keyNonce = suggestedStartLevel?.nonce ?? 0;
     return (
       <div className={rootClasses}>
-        <FadeInView key="memory_game">
-          <MemoryGame onBack={backToHub} />
+        {renderMiniQuestBanner()}
+        <FadeInView key={`memory_game_${keyNonce}`}>
+          <MemoryGame onBack={backFromMiniGame} initialLevel={lvl} />
         </FadeInView>
       </div>
     );
   }
 
   if (currentScreen === 'letters_game') {
+    const lvl = suggestedStartLevel?.gameId === 'letters' ? suggestedStartLevel.level : undefined;
+    const keyNonce = suggestedStartLevel?.nonce ?? 0;
     return (
       <div className={rootClasses}>
-        <FadeInView key="letters_game">
-          <LettersGame onBack={backToHub} />
+        {renderMiniQuestBanner()}
+        <FadeInView key={`letters_game_${keyNonce}`}>
+          <LettersGame onBack={backFromMiniGame} initialLevel={lvl} />
         </FadeInView>
       </div>
     );
   }
 
   if (currentScreen === 'numbers_game') {
+    const lvl = suggestedStartLevel?.gameId === 'numbers' ? suggestedStartLevel.level : undefined;
+    const keyNonce = suggestedStartLevel?.nonce ?? 0;
     return (
       <div className={rootClasses}>
-        <FadeInView key="numbers_game">
-          <NumbersGame onBack={backToHub} />
+        {renderMiniQuestBanner()}
+        <FadeInView key={`numbers_game_${keyNonce}`}>
+          <NumbersGame onBack={backFromMiniGame} initialLevel={lvl} />
         </FadeInView>
       </div>
     );
   }
 
   if (currentScreen === 'colors_game') {
+    const lvl = suggestedStartLevel?.gameId === 'colors' ? suggestedStartLevel.level : undefined;
+    const keyNonce = suggestedStartLevel?.nonce ?? 0;
     return (
       <div className={rootClasses}>
-        <FadeInView key="colors_game">
-          <ColorsGame onBack={backToHub} />
+        {renderMiniQuestBanner()}
+        <FadeInView key={`colors_game_${keyNonce}`}>
+          <ColorsGame onBack={backFromMiniGame} initialLevel={lvl} />
         </FadeInView>
       </div>
     );
   }
 
   if (currentScreen === 'math_game') {
+    const lvl = suggestedStartLevel?.gameId === 'math' ? suggestedStartLevel.level : undefined;
+    const keyNonce = suggestedStartLevel?.nonce ?? 0;
     return (
       <div className={rootClasses}>
-        <FadeInView key="math_game">
-          <MathGame onBack={backToHub} />
+        {renderMiniQuestBanner()}
+        <FadeInView key={`math_game_${keyNonce}`}>
+          <MathGame onBack={backFromMiniGame} initialLevel={lvl} />
+        </FadeInView>
+      </div>
+    );
+  }
+
+  if (currentScreen === 'family_challenge') {
+    return (
+      <div className={rootClasses}>
+        <FadeInView key="family_challenge">
+          <FamilyChallenge
+            onBack={() => {
+              setAutoStartPending(false);
+              setCurrentScreen(activeProfile ? 'hub' : 'profile_select');
+            }}
+            autoStart={autoStartPending}
+          />
+        </FadeInView>
+      </div>
+    );
+  }
+
+  if (currentScreen === 'rpg_world') {
+    return (
+      <div className={rootClasses}>
+        <FadeInView key="rpg_world">
+          <RpgWorld
+            onBack={() => {
+              setAutoStartPending(false);
+              setRpgMiniQuestBanner(null);
+              setCurrentScreen(activeProfile ? 'hub' : 'profile_select');
+            }}
+            onLaunchMiniGame={(gameId, miniQuest) => {
+              setRpgMiniQuestBanner(miniQuest ?? null);
+              launchGame(gameId);
+            }}
+            autoStart={autoStartPending}
+          />
         </FadeInView>
       </div>
     );
@@ -241,97 +384,157 @@ function AppContent() {
       <FadeInView key={currentScreen}>
         {/* 1. PROFILE SELECT SCREEN */}
         {currentScreen === 'profile_select' && (
-          <div className="bt-screen-wrapper">
-            <div style={{ height: 24 }} />
-            <Mascot
-              expression="happy"
-              message="Welcome to Braintune! Let's choose your profile!"
-              size={115}
-            />
-
-            <div className="bt-profile-header-row">
-              <h1 className="bt-profile-title">Who is playing?</h1>
-              {profiles.length > 0 && (
+          <div className="bt-screen-wrapper bt-profile-studio">
+            <header className="bt-studio-topbar">
+              <div className="bt-brand-lockup">
+                <span className="bt-brand-mark" aria-hidden="true">🧠</span>
+                <span className="bt-brand-name">Braintune</span>
+              </div>
+              <div className="bt-topbar-actions">
                 <button
                   type="button"
-                  className="bt-edit-toggle"
-                  onClick={() => setIsEditing(!isEditing)}
-                >
-                  {isEditing ? 'Done ✅' : 'Edit ✏️'}
-                </button>
-              )}
-            </div>
-
-            <div className="bt-profiles-list">
-              {profiles.map(p => (
-                <button
-                  type="button"
-                  key={p.id}
-                  className="bt-profile-card"
+                  className="bt-topbar-btn"
                   onClick={() => {
-                    if (isEditing) {
-                      setEditingProfile(p);
-                      setEditName(p.name);
-                      setEditAvatar(p.avatar);
-                      setFormError('');
-                      setShowEditProfileModal(true);
-                    } else {
-                      handleSelectProfile(p.id);
-                    }
+                    SoundService.playClick();
+                    setCurrentScreen('rpg_world');
                   }}
                 >
-                  <span className="bt-profile-avatar">{p.avatar}</span>
-                  <div className="bt-profile-info">
-                    <div className="bt-profile-name">{p.name}</div>
-                    <div className="bt-profile-stars">
-                      ⭐ {p.stars} stars • 🪙 {p.coins || 0} coins
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      fontSize: 18,
-                      fontWeight: 700,
-                      color: isEditing ? 'var(--secondary)' : 'var(--border)',
-                    }}
-                  >
-                    {isEditing ? '✏️' : '▶'}
-                  </span>
+                  🗺️ Quest World
                 </button>
-              ))}
+                <button
+                  type="button"
+                  className="bt-topbar-btn primary"
+                  onClick={() => {
+                    SoundService.playClick();
+                    setCurrentScreen('family_challenge');
+                  }}
+                >
+                  👨‍👩‍👧‍👦 Family Play
+                </button>
+                <button
+                  type="button"
+                  className="bt-topbar-btn"
+                  onClick={() => setShowParentGate(true)}
+                >
+                  🔒 Parent Zone
+                </button>
+              </div>
+            </header>
 
-              <button
-                type="button"
-                className="bt-profile-card bt-add-profile-btn"
-                onClick={() => {
-                  setFormError('');
-                  setShowAddProfileModal(true);
-                }}
-              >
-                <span style={{ fontSize: 22 }}>➕</span>
-                <span className="bt-add-profile-text">Add New Child Profile</span>
-              </button>
-            </div>
+            <section className="bt-welcome-hero">
+              <Mascot
+                expression="happy"
+                message="Welcome to Braintune! Pick a player to begin."
+                size={104}
+              />
+            </section>
 
-            <button
-              type="button"
-              className="bt-parent-trigger"
-              onClick={() => setShowParentGate(true)}
-            >
-              🔒 Parent Zone
-            </button>
+            <section className="bt-profile-section">
+              <div className="bt-profile-header-row">
+                <div>
+                  <h1 className="bt-profile-title">Who is playing?</h1>
+                  <p className="bt-profile-subtitle">
+                    Choose a child profile or jump straight into Family Play together.
+                  </p>
+                </div>
+                {profiles.length > 0 && (
+                  <button
+                    type="button"
+                    className="bt-edit-toggle"
+                    onClick={() => setIsEditing(!isEditing)}
+                  >
+                    {isEditing ? 'Done ✅' : 'Edit ✏️'}
+                  </button>
+                )}
+              </div>
+
+              <div className="bt-profiles-list">
+                {profiles.map(p => {
+                  const isCelebrating = Boolean(
+                    getActiveLevelUpCelebration(levelUpCelebrations, p.id, Date.now()),
+                  );
+                  return (
+                    <button
+                      type="button"
+                      key={p.id}
+                      className={`bt-profile-card ${isCelebrating ? 'level-up-celebrating' : ''}`}
+                      onClick={() => {
+                        if (isEditing) {
+                          setEditingProfile(p);
+                          setEditName(p.name);
+                          setEditAvatar(p.avatar);
+                          setFormError('');
+                          setShowEditProfileModal(true);
+                        } else {
+                          handleSelectProfile(p.id);
+                        }
+                      }}
+                    >
+                      <span
+                        className={`bt-profile-avatar ${isCelebrating ? 'bt-avatar-dance' : ''}`}
+                        data-celebrating={isCelebrating ? 'true' : undefined}
+                        data-testid={isCelebrating ? 'celebrating-profile-avatar' : undefined}
+                      >
+                        {p.avatar}
+                      </span>
+                      <div className="bt-profile-info">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <div className="bt-profile-name">{p.name}</div>
+                          {isCelebrating && (
+                            <span className="bt-levelup-chip">🎉 Level {p.level}!</span>
+                          )}
+                        </div>
+                        <div className="bt-profile-stars">
+                          Level {p.level} · ⭐ {p.stars} stars · 🪙 {p.coins || 0} coins
+                        </div>
+                      </div>
+                      <span
+                        className="bt-profile-arrow"
+                        style={{
+                          color: isEditing ? 'var(--secondary)' : 'var(--primary)',
+                        }}
+                      >
+                        {isEditing ? '✏️' : '▶'}
+                      </span>
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  className="bt-profile-card bt-add-profile-btn"
+                  onClick={() => {
+                    setFormError('');
+                    setShowAddProfileModal(true);
+                  }}
+                >
+                  <span className="bt-add-icon" aria-hidden="true">➕</span>
+                  <span className="bt-add-profile-text">Add New Child Profile</span>
+                </button>
+              </div>
+            </section>
           </div>
         )}
 
         {/* 2. GAME HUB SCREEN */}
-        {currentScreen === 'hub' && activeProfile && (
-          <div className="bt-screen-wrapper" style={{ paddingBottom: 32 }}>
+        {currentScreen === 'hub' && activeProfile && (() => {
+          const isHubCelebrating = Boolean(
+            getActiveLevelUpCelebration(levelUpCelebrations, activeProfile.id, Date.now()),
+          );
+          return (
+          <div className="bt-screen-wrapper bt-hub-studio">
             <header className="bt-hub-header">
               <button
                 type="button"
                 className="bt-header-profile"
                 onClick={handleLogoutProfile}
               >
-                <span className="bt-header-avatar">{activeProfile.avatar}</span>
+                <span
+                  className={`bt-header-avatar ${isHubCelebrating ? 'bt-avatar-dance' : ''}`}
+                  data-celebrating={isHubCelebrating ? 'true' : undefined}
+                >
+                  {activeProfile.avatar}
+                </span>
                 <div>
                   <div className="bt-header-name">{activeProfile.name}</div>
                   <div className="bt-header-sub">Change Profile 🔁</div>
@@ -340,7 +543,9 @@ function AppContent() {
 
               <div className="bt-header-right">
                 <div className="bt-header-stars">
-                  ⭐ {activeProfile.stars} • 🪙 {activeProfile.coins || 0}
+                  <span>⭐ {activeProfile.stars}</span>
+                  <span className="bt-meta-sep" aria-hidden="true">·</span>
+                  <span>🪙 {activeProfile.coins || 0}</span>
                 </div>
                 <button
                   type="button"
@@ -353,42 +558,84 @@ function AppContent() {
               </div>
             </header>
 
-            <Mascot
-              expression="happy"
-              message={`Hi ${activeProfile.name}! Pick a fun game to build your brain power today!`}
-              size={105}
-            />
+            <div className="bt-hub-hero-grid">
+              <div className="bt-hero-left">
+                <div className="bt-hero-mascot-wrap">
+                  <Mascot
+                    expression={isHubCelebrating ? 'cheering' : 'happy'}
+                    message={
+                      isHubCelebrating
+                        ? `Woohoo ${activeProfile.name}! You reached Level ${activeProfile.level}!`
+                        : `Hi ${activeProfile.name}! Ready for today's brain adventure?`
+                    }
+                    size={96}
+                  />
+                </div>
+                <PlayerProgressCard
+                  avatar={activeProfile.avatar}
+                  xp={activeProfile.xp}
+                  streak={activeProfile.streak}
+                  badges={activeProfile.badges}
+                  isCelebrating={isHubCelebrating}
+                />
+              </div>
 
-            <PlayerProgressCard
-              xp={activeProfile.xp}
-              streak={activeProfile.streak}
-              badges={activeProfile.badges}
-            />
+              <button
+                type="button"
+                className="bt-family-banner"
+                onClick={() => {
+                  SoundService.playClick();
+                  setCurrentScreen('family_challenge');
+                }}
+              >
+                <div className="bt-family-banner-top">
+                  <span className="bt-family-emblem" aria-hidden="true">👨‍👩‍👧‍👦</span>
+                  <span className="bt-family-kicker">Kids &amp; Adults · Shared Play</span>
+                </div>
+                <div className="bt-family-banner-title">Family Play Arena</div>
+                <p className="bt-family-banner-desc">
+                  Play side-by-side in Co-Op Team, test skills in a balanced Friendly Duel, or race the clock in Brain Blitz.
+                </p>
+                <div className="bt-family-banner-cta">
+                  <span>Start Playing Together</span>
+                  <span aria-hidden="true">▶</span>
+                </div>
+              </button>
+            </div>
 
-            <h2 className="bt-section-title">Your Play Center</h2>
+            <div className="bt-section-header">
+              <h2 className="bt-section-title">Your Play Center</h2>
+              <span className="bt-section-caption">
+                5 skill games + Quest World RPG adventure
+              </span>
+            </div>
 
             <div className="bt-games-grid">
               {GAME_REGISTRY.map(game => {
                 const stat = activeStats?.[game.id];
                 const unlocked = highestUnlockedLevel(stat);
+                const icon = GAME_ICON_MAP[game.id] || '🎮';
                 return (
                   <button
                     type="button"
                     key={game.id}
                     className="bt-game-card"
-                    style={{ borderLeftColor: game.themeColor }}
                     onClick={() => launchGame(game.id)}
                     aria-label={`${game.name}, unlocked up to ${levelLabel(unlocked)} level`}
                   >
-                    <div className="bt-game-card-header">
-                      <span className="bt-game-card-title">{game.name}</span>
+                    <div className="bt-game-card-top">
                       <span
-                        className="bt-level-badge"
-                        style={{ backgroundColor: game.themeColor }}
+                        className="bt-game-emblem"
+                        style={{ backgroundColor: `${game.themeColor}1C`, color: game.themeColor }}
+                        aria-hidden="true"
                       >
-                        Lvl {unlocked}/{MAX_LEVEL}
+                        {icon}
+                      </span>
+                      <span className="bt-level-text">
+                        Level {unlocked} / {MAX_LEVEL}
                       </span>
                     </div>
+                    <div className="bt-game-card-title">{game.name}</div>
                     <div className="bt-game-card-desc">{game.description}</div>
                     <div className="bt-progress-bar-wrap">
                       <div
@@ -403,22 +650,74 @@ function AppContent() {
                       <span className="bt-game-card-age">
                         {stat && stat.sessionsPlayed > 0
                           ? `${stat.sessionsPlayed} plays · ${stat.successRate}% accuracy`
-                          : `Ages ${game.minAge}+ · New!`}
+                          : `Ages ${game.minAge}+ · Ready to play`}
                       </span>
-                      <span className="bt-play-arrow">Play Now ▶</span>
+                      <span className="bt-play-arrow" style={{ color: game.themeColor }}>
+                        <span>Play</span>
+                        <span aria-hidden="true">▶</span>
+                      </span>
                     </div>
                   </button>
                 );
               })}
+
+              <button
+                type="button"
+                className="bt-game-card bt-rpg-hub-card"
+                onClick={() => {
+                  SoundService.playClick();
+                  setCurrentScreen('rpg_world');
+                }}
+                aria-label="Quest World RPG, walk around to meet villagers, take new tasks, and open treasure chests"
+              >
+                <div className="bt-game-card-top">
+                  <span
+                    className="bt-game-emblem"
+                    style={{ backgroundColor: '#10B9811F', color: '#059669' }}
+                    aria-hidden="true"
+                  >
+                    🗺️
+                  </span>
+                  <span className="bt-level-text">Open World RPG</span>
+                </div>
+                <div className="bt-game-card-title">Quest World RPG</div>
+                <div className="bt-game-card-desc">
+                  Walk across meadows &amp; bridges, talk to villagers for new tasks, and find hidden treasure chests!
+                </div>
+                <div className="bt-progress-bar-wrap">
+                  <div
+                    className="bt-progress-bar-fill"
+                    style={{
+                      width: `${Math.min(100, Math.max(18, (activeStats?.rpg?.sessionsPlayed || 0) * 16))}%`,
+                      backgroundColor: '#10B981',
+                    }}
+                  />
+                </div>
+                <div className="bt-game-card-footer">
+                  <span className="bt-game-card-age">
+                    {activeStats?.rpg && activeStats.rpg.sessionsPlayed > 0
+                      ? `${activeStats.rpg.sessionsPlayed} tasks & chests claimed`
+                      : 'Walk · Quests · Chests'}
+                  </span>
+                  <span className="bt-play-arrow" style={{ color: '#059669' }}>
+                    <span>Explore</span>
+                    <span aria-hidden="true">▶</span>
+                  </span>
+                </div>
+              </button>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* 3. PARENT ZONE / SETTINGS & ANALYTICS */}
         {currentScreen === 'parent_zone' && (
-          <div className="bt-screen-wrapper" style={{ paddingTop: 0, paddingBottom: 40 }}>
+          <div className="bt-screen-wrapper bt-hub-studio" style={{ paddingTop: 16, paddingBottom: 40 }}>
             <header className="bt-parent-header">
-              <span className="bt-parent-header-title">Parent Settings &amp; Reports</span>
+              <div>
+                <div className="bt-parent-header-kicker">Grown-Up Controls</div>
+                <span className="bt-parent-header-title">Parent Settings &amp; Reports</span>
+              </div>
               <button
                 type="button"
                 className="bt-parent-exit-btn"
@@ -428,74 +727,71 @@ function AppContent() {
               </button>
             </header>
 
-            <h2 className="bt-section-title">Child Performance Reports</h2>
-            {profiles.length === 0 ? (
-              <div
-                style={{
-                  backgroundColor: 'var(--card)',
-                  padding: 20,
-                  borderRadius: 16,
-                  textAlign: 'center',
-                  color: 'var(--text-muted)',
-                  fontSize: 14,
-                }}
-              >
-                No children profiles created yet.
-              </div>
-            ) : (
-              profiles.map(p => <ChildReportCard key={p.id} profile={p} />)
-            )}
+            <div className="bt-parent-grid">
+              <section>
+                <h2 className="bt-section-title">Child Performance Reports</h2>
+                {profiles.length === 0 ? (
+                  <div className="bt-empty-card">
+                    No children profiles created yet.
+                  </div>
+                ) : (
+                  profiles.map(p => <ChildReportCard key={p.id} profile={p} />)
+                )}
+              </section>
 
-            <h2 className="bt-section-title">App Preferences</h2>
-            <div className="bt-settings-card">
-              <SettingToggle
-                title="Sound Effects"
-                desc="Play sounds for correct/incorrect answers"
-                value={settings.soundEffectsEnabled}
-                onToggle={() =>
-                  updateSettings({ soundEffectsEnabled: !settings.soundEffectsEnabled })
-                }
-              />
-              <SettingToggle
-                title="Background Music"
-                desc="Play relaxing background tunes"
-                value={settings.musicEnabled}
-                onToggle={() => updateSettings({ musicEnabled: !settings.musicEnabled })}
-              />
-              <SettingToggle
-                title="Voice Instructions"
-                desc="Read game commands out loud"
-                value={settings.voiceInstructionsEnabled}
-                onToggle={() =>
-                  updateSettings({
-                    voiceInstructionsEnabled: !settings.voiceInstructionsEnabled,
-                  })
-                }
-                last
-              />
-            </div>
+              <section>
+                <h2 className="bt-section-title">App Preferences</h2>
+                <div className="bt-settings-card">
+                  <SettingToggle
+                    title="Sound Effects"
+                    desc="Play sounds for correct/incorrect answers"
+                    value={settings.soundEffectsEnabled}
+                    onToggle={() =>
+                      updateSettings({ soundEffectsEnabled: !settings.soundEffectsEnabled })
+                    }
+                  />
+                  <SettingToggle
+                    title="Background Music"
+                    desc="Play relaxing background tunes"
+                    value={settings.musicEnabled}
+                    onToggle={() => updateSettings({ musicEnabled: !settings.musicEnabled })}
+                  />
+                  <SettingToggle
+                    title="Voice Instructions"
+                    desc="Read game commands out loud"
+                    value={settings.voiceInstructionsEnabled}
+                    onToggle={() =>
+                      updateSettings({
+                        voiceInstructionsEnabled: !settings.voiceInstructionsEnabled,
+                      })
+                    }
+                    last
+                  />
+                </div>
 
-            <h2 className="bt-section-title">Accessibility</h2>
-            <div className="bt-settings-card">
-              <SettingToggle
-                title="High Contrast"
-                desc="Stronger colors for better visibility"
-                value={settings.highContrast}
-                onToggle={() => updateSettings({ highContrast: !settings.highContrast })}
-              />
-              <SettingToggle
-                title="Reduced Motion"
-                desc="Calm down animations and transitions"
-                value={settings.reducedMotion}
-                onToggle={() => updateSettings({ reducedMotion: !settings.reducedMotion })}
-              />
-              <SettingToggle
-                title="Larger Text"
-                desc="Increase text size across the app"
-                value={settings.largeText}
-                onToggle={() => updateSettings({ largeText: !settings.largeText })}
-                last
-              />
+                <h2 className="bt-section-title">Accessibility</h2>
+                <div className="bt-settings-card">
+                  <SettingToggle
+                    title="High Contrast"
+                    desc="Stronger colors for better visibility"
+                    value={settings.highContrast}
+                    onToggle={() => updateSettings({ highContrast: !settings.highContrast })}
+                  />
+                  <SettingToggle
+                    title="Reduced Motion"
+                    desc="Calm down animations and transitions"
+                    value={settings.reducedMotion}
+                    onToggle={() => updateSettings({ reducedMotion: !settings.reducedMotion })}
+                  />
+                  <SettingToggle
+                    title="Larger Text"
+                    desc="Increase text size across the app"
+                    value={settings.largeText}
+                    onToggle={() => updateSettings({ largeText: !settings.largeText })}
+                    last
+                  />
+                </div>
+              </section>
             </div>
           </div>
         )}
@@ -647,13 +943,29 @@ function AppContent() {
 }
 
 const PlayerProgressCard: React.FC<{
+  avatar: string;
   xp: number;
   streak: number;
   badges: string[];
-}> = ({ xp, streak, badges }) => {
+  isCelebrating?: boolean;
+}> = ({ avatar, xp, streak, badges, isCelebrating = false }) => {
   const lp = levelProgress(xp);
   return (
-    <div className="bt-progress-card">
+    <div className={`bt-progress-card ${isCelebrating ? 'level-up-celebrating' : ''}`}>
+      {isCelebrating && (
+        <div className="bt-progress-dance-banner" data-testid="hub-levelup-dance-banner">
+          <span
+            className="bt-progress-dance-avatar bt-avatar-dance"
+            data-celebrating="true"
+            data-testid="hub-celebrating-avatar"
+          >
+            {avatar}
+          </span>
+          <span className="bt-progress-dance-text">
+            🎉 Level {lp.level} Celebration! Great job!
+          </span>
+        </div>
+      )}
       <div className="bt-progress-top">
         <div className="bt-level-circle">
           <span className="bt-level-circle-num">{lp.level}</span>
@@ -690,6 +1002,8 @@ const GAME_META: Record<string, string> = {
   numbers: '🔢 Numbers',
   colors: '🎨 Colors',
   math: '➕ Math',
+  family: '👨‍👩‍👧‍👦 Family',
+  rpg: '🗺️ Quest World',
 };
 
 const SettingToggle: React.FC<{

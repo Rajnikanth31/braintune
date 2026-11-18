@@ -215,7 +215,7 @@ export const DB = {
     totalTaps: number,
     difficultyLevel: number,
     coinsEarned: number = 0
-  ): Promise<{ newBadges: string[]; profile?: ChildProfile }> {
+  ): Promise<{ newBadges: string[]; prevLevel: number; newLevel: number; profile?: ChildProfile }> {
     try {
       const stats = await this.getChildStats(childId);
       const gameStat = stats[gameId] || {
@@ -255,10 +255,12 @@ export const DB = {
       const profileIndex = profiles.findIndex(p => p.id === childId);
       if (profileIndex > -1) {
         const profile = profiles[profileIndex];
+        const prevLevel = profile.level ?? levelForXp(profile.xp);
         profile.stars += starsEarned;
         profile.coins = (profile.coins ?? 0) + coinsEarned;
         profile.xp += xpForStars(starsEarned);
-        profile.level = levelForXp(profile.xp);
+        const newLevel = levelForXp(profile.xp);
+        profile.level = newLevel;
         profile.completedSessions += 1;
 
         const streakResult = updateStreak(profile.streak, profile.lastDayKey);
@@ -273,12 +275,12 @@ export const DB = {
 
         profiles[profileIndex] = profile;
         await this.saveProfiles(profiles);
-        return { newBadges: fresh, profile };
+        return { newBadges: fresh, prevLevel, newLevel, profile };
       }
-      return { newBadges: [], profile: undefined };
+      return { newBadges: [], prevLevel: 1, newLevel: 1, profile: undefined };
     } catch (e) {
       console.error(`Failed to update game session for child ${childId}`, e);
-      return { newBadges: [], profile: undefined };
+      return { newBadges: [], prevLevel: 1, newLevel: 1, profile: undefined };
     }
   },
 

@@ -18,6 +18,7 @@ import {
 
 interface LettersGameProps {
   onBack: () => void;
+  initialLevel?: number;
 }
 
 const PHONICS: { letter: string; word: string; emoji: string }[] = [
@@ -102,14 +103,14 @@ function makeQuestion(level: number): Question {
   };
 }
 
-export const LettersGame: React.FC<LettersGameProps> = ({ onBack }) => {
+export const LettersGame: React.FC<LettersGameProps> = ({ onBack, initialLevel = 1 }) => {
   const { activeStats } = useApp();
   const unlocked = highestUnlockedLevel(activeStats?.letters);
 
-  const session = useGameSession({ gameId: 'letters', startLevel: 1 });
+  const session = useGameSession({ gameId: 'letters', startLevel: initialLevel });
   const handleUnlockDifficulty = useUnlockDifficulty('letters');
   const [started, setStarted] = useState(false);
-  const [question, setQuestion] = useState<Question>(() => makeQuestion(1));
+  const [question, setQuestion] = useState<Question>(() => makeQuestion(initialLevel));
   const [locked, setLocked] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const [mascotExpr, setMascotExpr] = useState<MascotExpression>('thinking');

@@ -17,6 +17,7 @@ import {
 
 interface MemoryGameProps {
   onBack: () => void;
+  initialLevel?: number;
 }
 
 interface Card {
@@ -55,11 +56,11 @@ const itemsForLevel = (level: number) => {
   return Math.min(18 + (level - 15), ATTENTION_EMOJIS.length);
 };
 
-export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack }) => {
+export const MemoryGame: React.FC<MemoryGameProps> = ({ onBack, initialLevel = 1 }) => {
   const { activeStats } = useApp();
   const unlocked = highestUnlockedLevel(activeStats?.memory);
 
-  const session = useGameSession({ gameId: 'memory', startLevel: 1, adaptive: false });
+  const session = useGameSession({ gameId: 'memory', startLevel: initialLevel, adaptive: false });
   const handleUnlockDifficulty = useUnlockDifficulty('memory');
   const [started, setStarted] = useState(false);
   const [gameSubMode, setGameSubMode] = useState<'match' | 'attention'>('match');

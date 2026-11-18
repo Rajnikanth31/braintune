@@ -18,6 +18,7 @@ import {
 
 interface ColorsGameProps {
   onBack: () => void;
+  initialLevel?: number;
 }
 
 interface ColorItem {
@@ -220,14 +221,14 @@ function makeQuestion(level: number): Question {
   };
 }
 
-export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack }) => {
+export const ColorsGame: React.FC<ColorsGameProps> = ({ onBack, initialLevel = 1 }) => {
   const { activeStats } = useApp();
   const unlocked = highestUnlockedLevel(activeStats?.colors);
 
-  const session = useGameSession({ gameId: 'colors', startLevel: 1 });
+  const session = useGameSession({ gameId: 'colors', startLevel: initialLevel });
   const handleUnlockDifficulty = useUnlockDifficulty('colors');
   const [started, setStarted] = useState(false);
-  const [question, setQuestion] = useState<Question>(() => makeQuestion(1));
+  const [question, setQuestion] = useState<Question>(() => makeQuestion(initialLevel));
   const [locked, setLocked] = useState(false);
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [mascotExpr, setMascotExpr] = useState<MascotExpression>('thinking');

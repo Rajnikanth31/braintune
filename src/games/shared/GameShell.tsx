@@ -26,28 +26,37 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
   onBack,
   onPause,
 }) => (
-  <header className="bt-game-header" style={{ backgroundColor: themeColor }}>
-    <button
-      type="button"
-      className="bt-game-back-btn"
-      onClick={withClick(onBack)}
-      aria-label="Go back"
-    >
-      ◀ Back
-    </button>
-    <h1 className="bt-game-title">{title}</h1>
-    <div className="bt-game-header-right">
-      <div className="bt-star-pill">⭐ {stars}</div>
-      {onPause && (
-        <button
-          type="button"
-          className="bt-pause-btn"
-          onClick={withClick(onPause)}
-          aria-label="Pause Game"
-        >
-          ⏸️
-        </button>
-      )}
+  <header className="bt-game-header" style={{ borderBottomColor: themeColor }}>
+    <div className="bt-game-header-inner">
+      <button
+        type="button"
+        className="bt-game-back-btn"
+        onClick={withClick(onBack)}
+        aria-label="Go back"
+      >
+        <span aria-hidden="true">◀</span>
+        <span>Back</span>
+      </button>
+      <h1 className="bt-game-title" style={{ color: 'var(--text)' }}>
+        {title}
+      </h1>
+      <div className="bt-game-header-right">
+        <div className="bt-star-pill" aria-label={`${stars} stars`}>
+          <span aria-hidden="true">⭐</span>
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{stars}</span>
+        </div>
+        {onPause && (
+          <button
+            type="button"
+            className="bt-pause-btn"
+            style={{ borderColor: `${themeColor}55`, color: 'var(--text)' }}
+            onClick={withClick(onPause)}
+            aria-label="Pause Game"
+          >
+            ⏸️
+          </button>
+        )}
+      </div>
     </div>
   </header>
 );
@@ -282,6 +291,7 @@ export const GameSuccess: React.FC<GameSuccessProps> = ({
   onBack,
   onPlayNextMode,
 }) => {
+  const { learningRecap, openLearningRecap } = useApp();
   const passed = session.accuracy >= 60;
   let currentDifficulty = 'Basic';
   let nextDifficultyName = '';
@@ -452,6 +462,25 @@ export const GameSuccess: React.FC<GameSuccessProps> = ({
             {passed ? 'Replay Mode 🔁' : 'Try Again! 🔁'}
           </button>
 
+          {learningRecap && (
+            <button
+              type="button"
+              data-testid="open-recap-btn"
+              style={{
+                backgroundColor: '#EEF2FF',
+                border: '1.5px solid #C7D2FE',
+                color: '#4338CA',
+                padding: 12,
+                borderRadius: 18,
+                fontSize: 15,
+                fontWeight: 700,
+              }}
+              onClick={withClick(openLearningRecap)}
+            >
+              🎓 View Learning Recap
+            </button>
+          )}
+
           <button
             type="button"
             style={{
@@ -504,7 +533,8 @@ export const TutorialCard: React.FC<TutorialProps> = ({
         onClick={withClick(onStart)}
         aria-label="Start playing"
       >
-        Let&apos;s Go! ▶
+        <span>Let&apos;s Go!</span>
+        <span aria-hidden="true">▶</span>
       </button>
     </div>
   </div>
