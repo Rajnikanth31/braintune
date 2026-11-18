@@ -8,6 +8,12 @@ import {
   MAX_LEVEL,
   UNLOCK_ACCURACY,
 } from '../games/shared/progression';
+import {
+  PetSpeciesId,
+  PlayerPetState,
+  adoptPetInState,
+  createInitialPetState,
+} from '../games/pets/petLogic';
 
 export interface ChildProfile {
   id: string;
@@ -22,6 +28,7 @@ export interface ChildProfile {
   lastDayKey?: string;
   badges: string[];
   coins: number;
+  petState: PlayerPetState;
 }
 
 export interface GameStat {
@@ -102,12 +109,13 @@ function normalizeProfile(p: Partial<ChildProfile> & { id: string }): ChildProfi
   const stars = p.stars ?? 0;
   const xp = p.xp ?? xpForStars(stars);
   const coins = p.coins ?? stars * 5;
+  const completedSessions = p.completedSessions ?? 0;
   return {
     id: p.id,
     name: p.name ?? 'Friend',
     avatar: p.avatar ?? '🦊',
     stars,
-    completedSessions: p.completedSessions ?? 0,
+    completedSessions,
     lastPlayed: p.lastPlayed ?? new Date().toISOString(),
     xp,
     level: levelForXp(xp),
@@ -115,6 +123,7 @@ function normalizeProfile(p: Partial<ChildProfile> & { id: string }): ChildProfi
     lastDayKey: p.lastDayKey,
     badges: Array.isArray(p.badges) ? p.badges : [],
     coins,
+    petState: createInitialPetState(p.petState, completedSessions),
   };
 }
 
@@ -153,6 +162,7 @@ export const DB = {
       lastDayKey: undefined,
       badges: [],
       coins: 0,
+      petState: createInitialPetState(),
     };
     profiles.push(newProfile);
     await this.saveProfiles(profiles);
@@ -262,6 +272,13 @@ export const DB = {
         const newLevel = levelForXp(profile.xp);
         profile.level = newLevel;
         profile.completedSessions += 1;
+        profile.petState = {
+          ...createInitialPetState(profile.petState, profile.completedSessions - 1),
+          tasksCompleted: Math.max(
+            (profile.petState?.tasksCompleted ?? 0) + 1,
+            profile.completedSessions,
+          ),
+        };
 
         const streakResult = updateStreak(profile.streak, profile.lastDayKey);
         profile.streak = streakResult.streak;
@@ -362,6 +379,31 @@ export const DB = {
     } catch (e) {
       console.error(`Failed to unlock level with coins for child ${childId}`, e);
       return null;
+    }
+  },
+
+  async adoptPet(
+    childId: string,
+    petId: PetSpeciesId,
+    customName?: string,
+  ): Promise<{ profile: ChildProfile | null; adopted: boolean; reason?: string }> {
+    try {
+      const profiles = await this.getProfiles();
+      const idx = profiles.findIndex(p => p.id === childId);
+      if (idx < 0) return { profile: null, adopted: false, reason: 'Profile not found.' };
+      const profile = profiles[idx];
+      const currentPetState = createInitialPetState(profile.petState, profile.completedSessions);
+      const res = adoptPetInState(currentPetState, petId, customName);
+      if (!res.adopted) {
+        return { profile, adopted: false, reason: res.reason };
+      }
+      profile.petState = res.state;
+      profiles[idx] = profile;
+      await this.saveProfiles(profiles);
+      return { profile, adopted: true };
+    } catch (e) {
+      console.error(`Failed to adopt pet for child ${childId}`, e);
+      return { profile: null, adopted: false, reason: 'Could not save pet adoption.' };
     }
   },
 

@@ -37,6 +37,17 @@ import {
   NPC_MINI_QUESTS,
   MiniQuestDef,
 } from './rpgWorldLogic';
+import {
+  PET_CATALOG,
+  PlayerPetState,
+  getPetById,
+  getPetDisplayEmoji,
+  getPetDisplayName,
+  getPetGrowthStage,
+  isPetUnlocked,
+  stepPetFollow,
+} from '../pets/petLogic';
+import { AdoptPetModal } from '../../components/AdoptPetModal';
 import { NpcApproachDialog, NpcDialog } from './NpcDialog';
 
 interface RpgWorldProps {
@@ -91,7 +102,7 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
   onLaunchMiniGame,
   autoStart = false,
 }) => {
-  const { activeProfile, settings, updateGameResult } = useApp();
+  const { activeProfile, settings, updateGameResult, petState, adoptPet } = useApp();
   const profileId = activeProfile?.id ?? null;
   const heroAvatar = activeProfile?.avatar || '🦊';
   const heroName = activeProfile?.name || 'Explorer';
@@ -102,6 +113,7 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
   const [dismissedNpcId, setDismissedNpcId] = useState<string | null>(null);
   const [activeNpc, setActiveNpc] = useState<NpcDef | null>(null);
   const [showQuestLog, setShowQuestLog] = useState(false);
+  const [showAdoptPetModal, setShowAdoptPetModal] = useState(false);
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizFeedback, setQuizFeedback] = useState<string | null>(null);
   const [bannerNotice, setBannerNotice] = useState<string | null>(null);
@@ -110,9 +122,19 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
     x: Math.round(loadSavedRpgState(profileId).playerX),
     y: Math.round(loadSavedRpgState(profileId).playerY),
   }));
+  const [petCoords, setPetCoords] = useState<{ x: number; y: number }>(() => ({
+    x: Math.round(loadSavedRpgState(profileId).playerX - 36),
+    y: Math.round(loadSavedRpgState(profileId).playerY + 10),
+  }));
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<RpgSaveState>(rpgState);
+  const petStateRef = useRef<PlayerPetState>(petState);
+  const petPosRef = useRef<{ x: number; y: number }>({
+    x: rpgState.playerX - 36,
+    y: rpgState.playerY + 10,
+  });
+  const petWalkDistRef = useRef(0);
   const phaseRef = useRef<RpgPhase>(phase);
   const modalOpenRef = useRef<boolean>(false);
   const modalDrawDoneRef = useRef<boolean>(false);
@@ -147,6 +169,11 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
   }, [rpgState, profileId]);
 
   useEffect(() => {
+    petStateRef.current = petState;
+    modalDrawDoneRef.current = false;
+  }, [petState]);
+
+  useEffect(() => {
     phaseRef.current = phase;
     document.body.dataset.state = phase;
     return () => {
@@ -155,8 +182,8 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
   }, [phase]);
 
   useEffect(() => {
-    modalOpenRef.current = Boolean(activeNpc) || showQuestLog;
-  }, [activeNpc, showQuestLog]);
+    modalOpenRef.current = Boolean(activeNpc) || showQuestLog || showAdoptPetModal;
+  }, [activeNpc, showQuestLog, showAdoptPetModal]);
 
   useEffect(() => {
     if (!nearest || nearest.kind !== 'npc') {
@@ -311,6 +338,10 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
           setActiveNpc(null);
           return;
         }
+        if (showAdoptPetModal) {
+          setShowAdoptPetModal(false);
+          return;
+        }
         if (showQuestLog) {
           setShowQuestLog(false);
           return;
@@ -356,7 +387,7 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
       window.removeEventListener('blur', clearInputs);
       document.removeEventListener('visibilitychange', clearInputs);
     };
-  }, [activeNpc, showQuestLog, startGame, triggerInteract]);
+  }, [activeNpc, showQuestLog, showAdoptPetModal, startGame, triggerInteract]);
 
   // 60fps simulation & Canvas2D world renderer
   useEffect(() => {
@@ -499,15 +530,47 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
             return prevKey === nextKey ? prev : nearNow;
           });
         }
+
+        // Update virtual pet companion follow kinematics
+        if (petStateRef.current.adoptedPetId) {
+          const latestState = stateRef.current;
+          const nextPet = stepPetFollow(
+            petPosRef.current.x,
+            petPosRef.current.y,
+            latestState.playerX,
+            latestState.playerY,
+            facingAngleRef.current,
+            dt,
+          );
+          if (nextPet.movedDist > 0) {
+            petPosRef.current = { x: nextPet.x, y: nextPet.y };
+            petWalkDistRef.current += nextPet.movedDist;
+            const prx = Math.round(nextPet.x);
+            const pry = Math.round(nextPet.y);
+            setPetCoords(prev =>
+              Math.abs(prev.x - prx) >= 6 || Math.abs(prev.y - pry) >= 6
+                ? { x: prx, y: pry }
+                : prev,
+            );
+          }
+        }
       }
 
       // Draw Canvas2D world (skip continuous redraws while modal covers stage, and pace idle frames)
       const canvas = canvasRef.current;
+      const isPetCatchingUp = Boolean(
+        petStateRef.current.adoptedPetId &&
+          Math.hypot(
+            stateRef.current.playerX - petPosRef.current.x,
+            stateRef.current.playerY - petPosRef.current.y,
+          ) > 46,
+      );
       const isMovingOrAnimating =
         Boolean(targetPointRef.current) ||
         keysPressedRef.current.size > 0 ||
         dpadDirRef.current.x !== 0 ||
         dpadDirRef.current.y !== 0 ||
+        isPetCatchingUp ||
         particlesRef.current.some(p => p.active);
 
       const idleReady = worldTimeRef.current - lastIdleDrawRef.current >= 0.085;
@@ -528,6 +591,9 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
             particlesRef.current,
             heroAvatar,
             settings.reducedMotion,
+            petStateRef.current,
+            petPosRef.current,
+            petWalkDistRef.current,
           );
           lastIdleDrawRef.current = worldTimeRef.current;
           if (modalOpenRef.current || phaseRef.current !== 'playing') {
@@ -683,6 +749,9 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
     : null;
   const totalQuestsDone =
     rpgState.completedQuestIds.length + rpgState.dynamicTasksCompleted;
+  const activePet = getPetById(petState.adoptedPetId);
+  const petGrowth = getPetGrowthStage(petState.tasksCompleted);
+  const hasAnyUnlockedPet = PET_CATALOG.some(p => isPetUnlocked(p, petState.tasksCompleted));
 
   return (
     <div className="bt-rpg-shell">
@@ -697,6 +766,10 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
           data-testid="rpg-canvas"
           data-player-x={playerCoords.x}
           data-player-y={playerCoords.y}
+          data-pet-id={petState.adoptedPetId || ''}
+          data-pet-stage={petState.adoptedPetId ? petGrowth.stage : 0}
+          data-pet-x={petState.adoptedPetId ? petCoords.x : ''}
+          data-pet-y={petState.adoptedPetId ? petCoords.y : ''}
           data-nearest={nearest ? (nearest.kind === 'npc' ? nearest.npc.id : nearest.chest.id) : ''}
           onPointerDown={handleCanvasPointerDown}
           aria-label="Quest World adventure map. Use WASD or Arrow keys to walk, or click anywhere on the path."
@@ -762,6 +835,31 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
                     </>
                   )}
                 </div>
+
+                <button
+                  type="button"
+                  className="bt-rpg-pill-btn"
+                  data-testid="rpg-pet-pill"
+                  onClick={() => {
+                    SoundService.playClick();
+                    setShowAdoptPetModal(true);
+                  }}
+                  aria-label="Adopt or manage virtual pet companion"
+                >
+                  {activePet ? (
+                    <>
+                      <span aria-hidden="true">{getPetDisplayEmoji(activePet, petGrowth.stage)}</span>
+                      <span>
+                        {getPetDisplayName(petState)} · {petGrowth.label}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span aria-hidden="true">🐾</span>
+                      <span>{hasAnyUnlockedPet ? 'Adopt Pet!' : 'Adopt-a-Pet'}</span>
+                    </>
+                  )}
+                </button>
 
                 <button
                   type="button"
@@ -1057,6 +1155,12 @@ export const RpgWorld: React.FC<RpgWorldProps> = ({
             </div>
           </div>
         )}
+        <AdoptPetModal
+          isOpen={phase === 'playing' && showAdoptPetModal}
+          petState={petState}
+          onClose={() => setShowAdoptPetModal(false)}
+          onAdopt={adoptPet}
+        />
       </div>
     </div>
   );
@@ -1181,6 +1285,9 @@ function drawWorld(
   particles: PooledParticle[],
   heroAvatar: string,
   reducedMotion: boolean,
+  petState: PlayerPetState,
+  petPos: { x: number; y: number },
+  petWalkDist: number,
 ) {
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
 
@@ -1354,7 +1461,70 @@ function drawWorld(
     }
   }
 
-  // 7. Player Hero Avatar
+  // 7A. Adopted Virtual Pet Companion (trails behind hero & scales with growth stage)
+  const adoptedPet = getPetById(petState.adoptedPetId);
+  if (adoptedPet) {
+    const petGrowth = getPetGrowthStage(petState.tasksCompleted);
+    const petEmoji = getPetDisplayEmoji(adoptedPet, petGrowth.stage);
+    const petBob = reducedMotion
+      ? 0
+      : Math.abs(Math.sin(petWalkDist * 0.18)) * 4 + Math.sin(time * 3.5) * 1.5;
+    const radius = 14 * petGrowth.canvasScale;
+
+    // Ground shadow
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.16)';
+    ctx.beginPath();
+    ctx.ellipse(
+      petPos.x,
+      petPos.y + 13 * petGrowth.canvasScale,
+      12 * petGrowth.canvasScale,
+      4.5 * petGrowth.canvasScale,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+
+    // Stage 3+ golden/legend halo aura
+    if (petGrowth.stage >= 3) {
+      ctx.fillStyle =
+        petGrowth.stage === 4 ? 'rgba(244, 114, 182, 0.22)' : 'rgba(251, 191, 36, 0.22)';
+      ctx.beginPath();
+      ctx.arc(petPos.x, petPos.y - petBob, radius + 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Companion medallion
+    ctx.fillStyle = adoptedPet.bgTint;
+    ctx.strokeStyle = petGrowth.stage >= 2 ? petGrowth.ringColor : adoptedPet.accentColor;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(petPos.x, petPos.y - petBob, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Pet sprite
+    ctx.font = `${Math.round(19 * petGrowth.canvasScale)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(petEmoji, petPos.x, petPos.y - petBob + 0.5);
+
+    // Stage 4 Legend orbiting star
+    if (petGrowth.stage >= 4 && !reducedMotion) {
+      const orbitAngle = time * 2.6;
+      const sx = petPos.x + Math.cos(orbitAngle) * (radius + 6);
+      const sy = petPos.y - petBob + Math.sin(orbitAngle) * (radius + 6);
+      ctx.font = '11px sans-serif';
+      ctx.fillText('✨', sx, sy);
+    }
+
+    // Pet nameplate
+    ctx.font = 'bold 10px "Plus Jakarta Sans", sans-serif';
+    ctx.fillStyle = '#0F172A';
+    ctx.fillText(getPetDisplayName(petState), petPos.x, petPos.y + radius + 11);
+  }
+
+  // 7B. Player Hero Avatar
   const gaitBob = reducedMotion ? 0 : Math.abs(Math.sin(walkDist * 0.14)) * 4;
   ctx.fillStyle = 'rgba(15, 23, 42, 0.2)';
   ctx.beginPath();

@@ -22,6 +22,19 @@ import {
   buildLearningRecap,
   isLearningGameId,
 } from '../components/learningRecapLogic';
+import {
+  PetSpeciesId,
+  PlayerPetState,
+  adoptPetInState,
+  createInitialPetState,
+  evaluatePetMilestones,
+  getPetById,
+  getPetDisplayEmoji,
+  getPetDisplayName,
+  getPetGrowthStage,
+  loadGuestPetState,
+  saveGuestPetState,
+} from '../games/pets/petLogic';
 
 export interface DialogOptions {
   title: string;
@@ -62,6 +75,11 @@ interface AppContextType {
   registerRecapPlayHandler: (
     handler: (gameId: LearningGameId, targetLevel: number) => void,
   ) => void;
+  petState: PlayerPetState;
+  adoptPet: (
+    petId: PetSpeciesId,
+    customName?: string,
+  ) => Promise<{ adopted: boolean; reason?: string }>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -89,6 +107,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const recapPlayHandlerRef = useRef<
     ((gameId: LearningGameId, targetLevel: number) => void) | null
   >(null);
+  const [guestPetState, setGuestPetState] = useState<PlayerPetState>(() => loadGuestPetState());
 
   useEffect(() => {
     const timers = danceTimersRef.current;
@@ -194,6 +213,50 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const sessionAccuracy = totalTaps > 0 ? Math.round((correctTaps / totalTaps) * 100) : 100;
 
     if (!activeProfile) {
+      const prevTasks = guestPetState.tasksCompleted;
+      const nextTasks = prevTasks + 1;
+      const nextGuestPet: PlayerPetState = {
+        ...guestPetState,
+        tasksCompleted: nextTasks,
+      };
+      setGuestPetState(nextGuestPet);
+      saveGuestPetState(nextGuestPet);
+
+      const petEvents = evaluatePetMilestones(prevTasks, nextTasks, nextGuestPet);
+      const petToasts: AchievementToastItem[] = [];
+      for (const pet of petEvents.newlyUnlockedPets) {
+        petToasts.push({
+          id: `pet_unlock_${pet.id}_${Date.now()}`,
+          kind: 'badge',
+          kicker: 'Pet Unlocked!',
+          emoji: pet.stageEmojis[0],
+          title: `${pet.name} the ${pet.speciesLabel} Unlocked!`,
+          subtitle: 'Open Adopt-a-Pet to welcome your companion!',
+          accentColor: pet.accentColor,
+          bgTint: pet.bgTint,
+        });
+      }
+      if (petEvents.grewToStage) {
+        const stageInfo = getPetGrowthStage(nextTasks);
+        const adoptedDef = getPetById(nextGuestPet.adoptedPetId);
+        const petEmoji = adoptedDef
+          ? getPetDisplayEmoji(adoptedDef, petEvents.grewToStage)
+          : stageInfo.badgeEmoji;
+        petToasts.push({
+          id: `pet_grow_${petEvents.grewToStage}_${Date.now()}`,
+          kind: 'level_up',
+          kicker: 'Companion Grew!',
+          emoji: stageInfo.badgeEmoji,
+          title: `${getPetDisplayName(nextGuestPet)} reached ${stageInfo.label}!`,
+          subtitle: `Stage ${stageInfo.stage} companion active in Quest World ${petEmoji}`,
+          accentColor: stageInfo.ringColor,
+          bgTint: '#ECFDF5',
+        });
+      }
+      if (petToasts.length > 0) {
+        setAchievementQueue(prev => enqueueAchievements(prev, petToasts));
+      }
+
       if (isLearningGameId(gameId)) {
         const guestNext: ChildStats = {
           [gameId]: {
@@ -220,6 +283,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { newBadges: [] };
     }
 
+    const prevTasks = activeProfile.petState?.tasksCompleted ?? activeProfile.completedSessions ?? 0;
     const prevStatsSnapshot = activeStats || (await DB.getChildStats(activeProfile.id));
 
     const result = await DB.updateGameSession(
@@ -265,6 +329,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       result.prevLevel,
       result.newLevel,
     );
+
+    if (updatedProfile) {
+      const nextTasks = updatedProfile.petState.tasksCompleted;
+      const petEvents = evaluatePetMilestones(prevTasks, nextTasks, updatedProfile.petState);
+      for (const pet of petEvents.newlyUnlockedPets) {
+        toasts.push({
+          id: `pet_unlock_${pet.id}_${Date.now()}`,
+          kind: 'badge',
+          kicker: 'Pet Unlocked!',
+          emoji: pet.stageEmojis[0],
+          title: `${pet.name} the ${pet.speciesLabel} Unlocked!`,
+          subtitle: 'Visit Adopt-a-Pet to welcome your companion!',
+          accentColor: pet.accentColor,
+          bgTint: pet.bgTint,
+        });
+      }
+      if (petEvents.grewToStage) {
+        const stageInfo = getPetGrowthStage(nextTasks);
+        toasts.push({
+          id: `pet_grow_${petEvents.grewToStage}_${Date.now()}`,
+          kind: 'level_up',
+          kicker: 'Companion Grew!',
+          emoji: stageInfo.badgeEmoji,
+          title: `${getPetDisplayName(updatedProfile.petState)} grew to ${stageInfo.label}!`,
+          subtitle: `Stage ${stageInfo.stage} unlocked — see them follow you in Quest World!`,
+          accentColor: stageInfo.ringColor,
+          bgTint: '#ECFDF5',
+        });
+      }
+    }
+
     if (toasts.length > 0) {
       setAchievementQueue(prev => enqueueAchievements(prev, toasts));
     }
@@ -351,6 +446,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     [],
   );
 
+  const petState: PlayerPetState = activeProfile
+    ? createInitialPetState(activeProfile.petState, activeProfile.completedSessions)
+    : guestPetState;
+
+  const adoptPet = useCallback(
+    async (petId: PetSpeciesId, customName?: string) => {
+      if (activeProfile) {
+        const res = await DB.adoptPet(activeProfile.id, petId, customName);
+        if (res.adopted) {
+          const list = await DB.getProfiles();
+          setProfiles(list);
+          const updated = list.find(p => p.id === activeProfile.id) || null;
+          setActiveProfile(updated);
+        }
+        return { adopted: res.adopted, reason: res.reason };
+      }
+
+      const res = adoptPetInState(guestPetState, petId, customName);
+      if (res.adopted) {
+        setGuestPetState(res.state);
+        saveGuestPetState(res.state);
+      }
+      return { adopted: res.adopted, reason: res.reason };
+    },
+    [activeProfile, guestPetState],
+  );
+
   return (
     <AppContext.Provider
       value={{
@@ -374,6 +496,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         openLearningRecap,
         closeLearningRecap,
         registerRecapPlayHandler,
+        petState,
+        adoptPet,
       }}
     >
       {children}

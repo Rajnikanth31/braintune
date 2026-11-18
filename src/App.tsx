@@ -3,7 +3,6 @@ import { AppProvider, useApp } from './state/AppContext';
 import { Mascot } from './components/Mascot';
 import { FadeInView } from './components/FadeInView';
 import { AnimatedBackground } from './components/AnimatedBackground';
-import { ParentGate } from './components/ParentGate';
 import { SoundService } from './audio/SoundService';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MemoryGame } from './games/memory/MemoryGame';
@@ -15,16 +14,24 @@ import { FamilyChallenge } from './games/family/FamilyChallenge';
 import { RpgWorld } from './games/rpg/RpgWorld';
 import type { MiniQuestDef } from './games/rpg/rpgWorldLogic';
 import { GAME_REGISTRY } from './games/GameRegistry';
-import { DB, ChildProfile, ChildStats } from './storage/db';
+import { ChildProfile } from './storage/db';
 import {
   levelProgress,
   highestUnlockedLevel,
   levelLabel,
   MAX_LEVEL,
   BADGES,
-  badgeById,
 } from './games/shared/progression';
 import { getActiveLevelUpCelebration } from './components/levelUpCelebrationLogic';
+import { AdoptPetModal } from './components/AdoptPetModal';
+import {
+  PET_CATALOG,
+  getPetById,
+  getPetDisplayEmoji,
+  getPetDisplayName,
+  getPetGrowthStage,
+  isPetUnlocked,
+} from './games/pets/petLogic';
 
 const AVATARS = ['🦊', '🐨', '🐰', '🐯', '🐼', '🦁', '🐻', '🦄', '🐸', '🐵'];
 
@@ -61,6 +68,8 @@ function AppContent() {
     levelUpCelebrations,
     startLevelUpCelebration,
     registerRecapPlayHandler,
+    petState,
+    adoptPet,
   } = useApp();
 
   const [autoStartPending, setAutoStartPending] = useState(
@@ -79,7 +88,6 @@ function AppContent() {
     | 'math_game'
     | 'family_challenge'
     | 'rpg_world'
-    | 'parent_zone'
   >(() => {
     if (typeof window !== 'undefined') {
       const auto = new URLSearchParams(window.location.search).get('autostart');
@@ -90,7 +98,8 @@ function AppContent() {
   });
 
   const [showAddProfileModal, setShowAddProfileModal] = useState(false);
-  const [showParentGate, setShowParentGate] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAdoptPetModal, setShowAdoptPetModal] = useState(false);
 
   const [isEditing, setIsEditing] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -170,11 +179,6 @@ function AppContent() {
     SoundService.playClick();
     await selectProfile(null);
     setCurrentScreen('profile_select');
-  };
-
-  const handleParentGateSuccess = () => {
-    setShowParentGate(false);
-    setCurrentScreen('parent_zone');
   };
 
   const launchGame = (gameId: string) => {
@@ -413,10 +417,14 @@ function AppContent() {
                 </button>
                 <button
                   type="button"
-                  className="bt-topbar-btn"
-                  onClick={() => setShowParentGate(true)}
+                  className="bt-settings-btn"
+                  onClick={() => {
+                    SoundService.playClick();
+                    setShowSettingsModal(true);
+                  }}
+                  aria-label="Settings"
                 >
-                  🔒 Parent Zone
+                  ⚙️
                 </button>
               </div>
             </header>
@@ -550,8 +558,11 @@ function AppContent() {
                 <button
                   type="button"
                   className="bt-settings-btn"
-                  onClick={() => setShowParentGate(true)}
-                  aria-label="Parent Settings"
+                  onClick={() => {
+                    SoundService.playClick();
+                    setShowSettingsModal(true);
+                  }}
+                  aria-label="Settings"
                 >
                   ⚙️
                 </button>
@@ -602,6 +613,99 @@ function AppContent() {
                 </div>
               </button>
             </div>
+
+            {(() => {
+              const activePet = getPetById(petState.adoptedPetId);
+              const petGrowth = getPetGrowthStage(petState.tasksCompleted);
+              const unlockedCount = PET_CATALOG.filter(p =>
+                isPetUnlocked(p, petState.tasksCompleted),
+              ).length;
+              const nextUnlock = PET_CATALOG.find(
+                p => !isPetUnlocked(p, petState.tasksCompleted),
+              );
+              const progressPct = activePet
+                ? Math.round(petGrowth.progress * 100)
+                : nextUnlock
+                  ? Math.min(
+                      100,
+                      Math.round((petState.tasksCompleted / nextUnlock.unlockTasks) * 100),
+                    )
+                  : 100;
+
+              return (
+                <div className="bt-hub-pet-banner" data-testid="hub-pet-card">
+                  <div
+                    className="bt-hub-pet-emblem"
+                    style={{
+                      backgroundColor: activePet ? activePet.bgTint : '#FEF3C7',
+                      borderColor: activePet ? activePet.accentColor : '#F59E0B',
+                    }}
+                    aria-hidden="true"
+                  >
+                    {activePet
+                      ? getPetDisplayEmoji(activePet, petGrowth.stage)
+                      : unlockedCount > 0
+                        ? '🐾'
+                        : '🥚'}
+                  </div>
+
+                  <div className="bt-hub-pet-info">
+                    <div className="bt-hub-pet-title-row">
+                      <span className="bt-hub-pet-title">
+                        {activePet
+                          ? `${getPetDisplayName(petState)} · ${activePet.speciesLabel}`
+                          : unlockedCount > 0
+                            ? 'New Pet Companion Ready to Adopt!'
+                            : 'Adopt-a-Pet Companion'}
+                      </span>
+                      <span className="bt-hub-pet-stage-pill">
+                        {activePet
+                          ? `${petGrowth.badgeEmoji} Stage ${petGrowth.stage}: ${petGrowth.label}`
+                          : unlockedCount > 0
+                            ? `${unlockedCount} unlocked`
+                            : `${petState.tasksCompleted}/1 task to hatch`}
+                      </span>
+                    </div>
+                    <p className="bt-hub-pet-desc">
+                      {activePet
+                        ? petGrowth.nextTasks !== null
+                          ? `Follows ${activeProfile.name} in Quest World! Complete ${petGrowth.nextTasks - petState.tasksCompleted} more task${petGrowth.nextTasks - petState.tasksCompleted === 1 ? '' : 's'} to grow.`
+                          : `Follows ${activeProfile.name} in Quest World at Legend stage!`
+                        : unlockedCount > 0
+                          ? 'Open Adopt-a-Pet to name your companion and take them into Quest World!'
+                          : 'Complete your first learning game to hatch Pip the Sprout Pup!'}
+                    </p>
+                    <div className="bt-xp-track" style={{ height: 6, marginTop: 6 }}>
+                      <div
+                        className="bt-xp-fill"
+                        style={{
+                          width: `${progressPct}%`,
+                          background: activePet
+                            ? `linear-gradient(90deg, ${petGrowth.ringColor} 0%, #10B981 100%)`
+                            : 'linear-gradient(90deg, #F59E0B 0%, #10B981 100%)',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="bt-hub-pet-btn"
+                    data-testid="hub-open-adopt-pet-btn"
+                    onClick={() => {
+                      SoundService.playClick();
+                      setShowAdoptPetModal(true);
+                    }}
+                  >
+                    {activePet
+                      ? '🐾 Manage Pet'
+                      : unlockedCount > 0
+                        ? '🐾 Adopt Pet!'
+                        : '🥚 View Pets'}
+                  </button>
+                </div>
+              );
+            })()}
 
             <div className="bt-section-header">
               <h2 className="bt-section-title">Your Play Center</h2>
@@ -709,92 +813,6 @@ function AppContent() {
           </div>
           );
         })()}
-
-        {/* 3. PARENT ZONE / SETTINGS & ANALYTICS */}
-        {currentScreen === 'parent_zone' && (
-          <div className="bt-screen-wrapper bt-hub-studio" style={{ paddingTop: 16, paddingBottom: 40 }}>
-            <header className="bt-parent-header">
-              <div>
-                <div className="bt-parent-header-kicker">Grown-Up Controls</div>
-                <span className="bt-parent-header-title">Parent Settings &amp; Reports</span>
-              </div>
-              <button
-                type="button"
-                className="bt-parent-exit-btn"
-                onClick={() => setCurrentScreen(activeProfile ? 'hub' : 'profile_select')}
-              >
-                Exit
-              </button>
-            </header>
-
-            <div className="bt-parent-grid">
-              <section>
-                <h2 className="bt-section-title">Child Performance Reports</h2>
-                {profiles.length === 0 ? (
-                  <div className="bt-empty-card">
-                    No children profiles created yet.
-                  </div>
-                ) : (
-                  profiles.map(p => <ChildReportCard key={p.id} profile={p} />)
-                )}
-              </section>
-
-              <section>
-                <h2 className="bt-section-title">App Preferences</h2>
-                <div className="bt-settings-card">
-                  <SettingToggle
-                    title="Sound Effects"
-                    desc="Play sounds for correct/incorrect answers"
-                    value={settings.soundEffectsEnabled}
-                    onToggle={() =>
-                      updateSettings({ soundEffectsEnabled: !settings.soundEffectsEnabled })
-                    }
-                  />
-                  <SettingToggle
-                    title="Background Music"
-                    desc="Play relaxing background tunes"
-                    value={settings.musicEnabled}
-                    onToggle={() => updateSettings({ musicEnabled: !settings.musicEnabled })}
-                  />
-                  <SettingToggle
-                    title="Voice Instructions"
-                    desc="Read game commands out loud"
-                    value={settings.voiceInstructionsEnabled}
-                    onToggle={() =>
-                      updateSettings({
-                        voiceInstructionsEnabled: !settings.voiceInstructionsEnabled,
-                      })
-                    }
-                    last
-                  />
-                </div>
-
-                <h2 className="bt-section-title">Accessibility</h2>
-                <div className="bt-settings-card">
-                  <SettingToggle
-                    title="High Contrast"
-                    desc="Stronger colors for better visibility"
-                    value={settings.highContrast}
-                    onToggle={() => updateSettings({ highContrast: !settings.highContrast })}
-                  />
-                  <SettingToggle
-                    title="Reduced Motion"
-                    desc="Calm down animations and transitions"
-                    value={settings.reducedMotion}
-                    onToggle={() => updateSettings({ reducedMotion: !settings.reducedMotion })}
-                  />
-                  <SettingToggle
-                    title="Larger Text"
-                    desc="Increase text size across the app"
-                    value={settings.largeText}
-                    onToggle={() => updateSettings({ largeText: !settings.largeText })}
-                    last
-                  />
-                </div>
-              </section>
-            </div>
-          </div>
-        )}
       </FadeInView>
 
       {/* CREATE PROFILE MODAL */}
@@ -932,11 +950,104 @@ function AppContent() {
         </div>
       )}
 
-      {/* PARENTAL GATE OVERLAY */}
-      <ParentGate
-        isVisible={showParentGate}
-        onSuccess={handleParentGateSuccess}
-        onClose={() => setShowParentGate(false)}
+      {/* DIRECT SETTINGS MODAL */}
+      {showSettingsModal && (
+        <div
+          className="bt-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="App Settings"
+          onClick={() => setShowSettingsModal(false)}
+        >
+          <div
+            className="bt-modal-card bt-settings-modal-card"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bt-settings-modal-header">
+              <h2 className="bt-modal-title" style={{ margin: 0, textAlign: 'left' }}>
+                ⚙️ Settings
+              </h2>
+              <button
+                type="button"
+                className="bt-settings-close-btn"
+                onClick={() => setShowSettingsModal(false)}
+                aria-label="Close settings"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bt-settings-section-label">Audio &amp; Voice</div>
+            <div className="bt-settings-card">
+              <SettingToggle
+                title="Sound Effects"
+                desc="Play sounds for correct/incorrect answers"
+                value={settings.soundEffectsEnabled}
+                onToggle={() =>
+                  updateSettings({ soundEffectsEnabled: !settings.soundEffectsEnabled })
+                }
+              />
+              <SettingToggle
+                title="Background Music"
+                desc="Play relaxing background tunes"
+                value={settings.musicEnabled}
+                onToggle={() => updateSettings({ musicEnabled: !settings.musicEnabled })}
+              />
+              <SettingToggle
+                title="Voice Instructions"
+                desc="Read game commands out loud"
+                value={settings.voiceInstructionsEnabled}
+                onToggle={() =>
+                  updateSettings({
+                    voiceInstructionsEnabled: !settings.voiceInstructionsEnabled,
+                  })
+                }
+                last
+              />
+            </div>
+
+            <div className="bt-settings-section-label">Accessibility</div>
+            <div className="bt-settings-card">
+              <SettingToggle
+                title="High Contrast"
+                desc="Stronger colors for better visibility"
+                value={settings.highContrast}
+                onToggle={() => updateSettings({ highContrast: !settings.highContrast })}
+              />
+              <SettingToggle
+                title="Reduced Motion"
+                desc="Calm down animations and transitions"
+                value={settings.reducedMotion}
+                onToggle={() => updateSettings({ reducedMotion: !settings.reducedMotion })}
+              />
+              <SettingToggle
+                title="Larger Text"
+                desc="Increase text size across the app"
+                value={settings.largeText}
+                onToggle={() => updateSettings({ largeText: !settings.largeText })}
+                last
+              />
+            </div>
+
+            <div className="bt-modal-buttons" style={{ marginTop: 18 }}>
+              <button
+                type="button"
+                className="bt-modal-btn bt-modal-save"
+                onClick={() => setShowSettingsModal(false)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AdoptPetModal
+        isOpen={showAdoptPetModal}
+        petState={petState}
+        onClose={() => setShowAdoptPetModal(false)}
+        onAdopt={adoptPet}
+        onOpenRpgWorld={() => setCurrentScreen('rpg_world')}
       />
     </div>
   );
@@ -996,16 +1107,6 @@ const PlayerProgressCard: React.FC<{
   );
 };
 
-const GAME_META: Record<string, string> = {
-  memory: '🃏 Memory',
-  letters: '🅰 Letters',
-  numbers: '🔢 Numbers',
-  colors: '🎨 Colors',
-  math: '➕ Math',
-  family: '👨‍👩‍👧‍👦 Family',
-  rpg: '🗺️ Quest World',
-};
-
 const SettingToggle: React.FC<{
   title: string;
   desc: string;
@@ -1030,82 +1131,5 @@ const SettingToggle: React.FC<{
     </button>
   </div>
 );
-
-const ChildReportCard: React.FC<{ profile: ChildProfile }> = ({ profile }) => {
-  const [stats, setStats] = useState<ChildStats | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    DB.getChildStats(profile.id).then(data => {
-      if (mounted) setStats(data);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, [profile.id]);
-
-  if (!stats) return null;
-  const lp = levelProgress(profile.xp || 0);
-
-  return (
-    <div className="bt-report-card">
-      <div className="bt-report-header">
-        <span className="bt-report-avatar">{profile.avatar}</span>
-        <div>
-          <div className="bt-report-name">{profile.name}</div>
-          <div className="bt-report-played">
-            Last played: {new Date(profile.lastPlayed).toLocaleDateString()}
-          </div>
-        </div>
-        <div className="bt-report-badge">
-          ⭐ {profile.stars} • 🪙 {profile.coins || 0}
-        </div>
-      </div>
-
-      <div className="bt-report-summary">
-        <span>Level {lp.level}</span>
-        <span>🔥 {profile.streak || 0} day streak</span>
-        <span>🏅 {(profile.badges || []).length} badges</span>
-      </div>
-
-      <div className="bt-stats-table-header">Learning Performance</div>
-
-      {Object.values(stats).map(g => (
-        <div key={g.gameId} className="bt-stat-detail-row">
-          <div className="bt-stat-game-name">{GAME_META[g.gameId] || g.gameId}</div>
-          <div className="bt-stat-sub-row">
-            <span>Played: {g.sessionsPlayed}</span>
-            <span>Accuracy: {g.successRate}%</span>
-            <span>Max: {levelLabel(g.highestDifficultyReached)}</span>
-          </div>
-        </div>
-      ))}
-
-      {(profile.badges || []).length > 0 && (
-        <>
-          <div className="bt-stats-table-header" style={{ marginTop: 12 }}>
-            Badges Earned
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '4px 0' }}>
-            {profile.badges.map(id => {
-              const b = badgeById(id);
-              if (!b) return null;
-              return (
-                <span
-                  key={id}
-                  style={{ fontSize: 24 }}
-                  title={`${b.name}: ${b.description}`}
-                  aria-label={b.name}
-                >
-                  {b.emoji}
-                </span>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
-  );
-};
 
 export default App;
